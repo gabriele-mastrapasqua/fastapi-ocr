@@ -3,7 +3,7 @@ import numpy as np
 from scipy import ndimage
 from PIL import Image
 import paddleocr
-
+import pytesseract
 
 def sort_text_blocks(results):
     """
@@ -74,3 +74,39 @@ def rotate_image_numpy(image, angle):
                            flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
     
     return rotated
+
+
+def detect_angle_rotation_tesseract(preproc_img: Image.Image) -> int:
+    """
+    Detect angle retation using Tesseract OCR.
+    Returns the float angle value normalized to 0-360 degrees. 0 if no rotation is detected.
+    """
+    # Use Tesseract to find orientation
+    osd = pytesseract.image_to_osd(preproc_img)
+    print(f"OSD Output: {osd}\n")
+
+    # Estrai angolo di rotazione
+    rotation_line = [line for line in osd.split('\n') if "Orientation in degrees" in line]
+    if rotation_line:
+        angle = int(rotation_line[0].split(":")[1].strip())
+        print(f"→ Rotazione rilevata: {angle}°")
+
+        """
+        Orientation in degrees	Rotazione del testo	        Azione da fare sull’immagine
+        0	                    Corretta	                Nessuna
+        90	                    Ruotata a destra	        Ruotare -90° (a sinistra)
+        180	                    Capovolta	                Ruotare -180°
+        270	                    Ruotata a sinistra	        Ruotare -90° (a destra)
+        """
+
+        # Correggi l'immagine se necessario
+        needs_rotation = angle != 0
+        if angle != 0:
+            corrected_angle = - ((360 - angle) % 360)
+            return corrected_angle, needs_rotation
+        
+    else:
+        print("→ Nessun angolo di rotazione rilevato, immagine non modificata.")
+        
+    return 0, needs_rotation
+

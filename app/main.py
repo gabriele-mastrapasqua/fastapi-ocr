@@ -11,8 +11,9 @@ import app.utils.ocr_utils as utils
 import traceback
 
 # Setup logging
-logging.basicConfig(level=logging.INFO)
+import logging
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)  # Imposta solo il livello
 
 app = FastAPI(title="PaddleOCR API", version="1.0.0")
 
@@ -63,6 +64,7 @@ async def health_check():
 @app.post("/ocr")
 async def perform_ocr(
     file: UploadFile = File(...),
+    force_angle_rotation: int = 0,  # angolo di rotazione forzato (0 per nessuna rotazione, -90, 90, 180, ...)
     det_limit_side_len: int = 960,  # Risoluzione per detection
     det_limit_type: str = 'max',    # 'max' o 'min'
     rec_batch_num: int = 6,         # Batch size per recognition
@@ -98,13 +100,18 @@ async def perform_ocr(
         ocr.rec_batch_num = rec_batch_num
         ocr.max_text_length = max_text_length
 
-        #rotation_angle = utils.detect_image_rotation(image_path=img_array, num_samples=3)
-        #logger.info(f"Detected rotation angle: {rotation_angle} degrees")
-        #raise Exception(f"Simulated error for testing purposes... angle detected: {rotation_angle}")
+        # TODO detect rotation of the image and rotate to improve OCR results
+        angle_rotation_detected, image_needs_rotation = utils.detect_angle_rotation_tesseract(preproc_img=image)
+        logger.info(f"Detected rotation angle: {angle_rotation_detected} degrees")
 
         # TEST 
         #rotation_applied = -90
         rotation_applied = 0
+        if image_needs_rotation or force_angle_rotation != 0:
+            if force_angle_rotation != 0:
+                rotation_applied = force_angle_rotation
+            else:
+                rotation_applied = angle_rotation_detected
         img_array = utils.rotate_image_numpy(img_array, angle=rotation_applied)  # Forza rotazione a 0 per test
 
         # Usa OCR con paddleOCR per migliori risultati
