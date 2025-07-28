@@ -10,6 +10,7 @@ services:
     ports:
       - "9292:9292"
     volumes:
+      - .:/app
       - paddle_models_cpu:/root/.paddle
       #- paddle_models_cpu:/home/appuser/.paddle:rw
       - paddleocr_models_cpu:/root/.paddleocr
