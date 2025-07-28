@@ -30,8 +30,9 @@ try:
         show_log=True,
         det_model_dir=None,  # Usa modelli default
         rec_model_dir=None,
-        #cls_model_dir=None,
-        cls_model_dir="/root/.paddleocr/whl/cls/ch_ppocr_mobile_v2.0_cls_infer/",
+        cls_model_dir=None,
+        #cls_model_dir="/root/.paddleocr/whl/cls/ch_ppocr_mobile_v2.0_cls_infer/",
+        ocr_version='PP-OCRv3',
         cpu_threads=os.cpu_count(), 
         
     )
@@ -96,7 +97,6 @@ async def perform_ocr(
         ocr.det_limit_type = det_limit_type
         ocr.rec_batch_num = rec_batch_num
         ocr.max_text_length = max_text_length
-
 
         #rotation_angle = utils.detect_image_rotation(image_path=img_array, num_samples=3)
         #logger.info(f"Detected rotation angle: {rotation_angle} degrees")
