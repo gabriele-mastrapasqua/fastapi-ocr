@@ -8,6 +8,7 @@ import io
 import os
 import logging
 import app.utils.ocr_utils as utils
+import traceback
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -86,24 +87,77 @@ async def perform_ocr(
         # OCR con parametri personalizzati
         logger.info(f"Advanced OCR with det_limit_side_len: {det_limit_side_len}, rec_batch_num: {rec_batch_num}")
         
+
         # Applica i parametri direttamente all'OCR
         ocr.det_limit_side_len = det_limit_side_len
         ocr.det_limit_type = det_limit_type
         ocr.rec_batch_num = rec_batch_num
         ocr.max_text_length = max_text_length
 
-        # Perform OCR
-        logger.info("Starting OCR processing")
-        result = ocr.ocr(img_array, cls=True)
+        original_img = img_array.copy()
+        rotation_applied = 0
+        corrected_img = img_array
+        
+        # Step 1: Rileva la rotazione usando solo il full OCR 
+        # (evita il problema con rec=False, cls=False)
+        logger.info("Detecting document rotation...")
+        
+        try:
+            # Usa OCR completo per rilevare rotazione
+            initial_result = ocr.ocr(img_array, cls=True)
+            
+            if initial_result and initial_result[0] and len(initial_result[0]) > 0:
+                # Calcola l'angolo di rotazione dai bounding box
+                angles = []
+                for line in initial_result[0]:
+                    bbox = line[0]
+                    p1, p2 = bbox[0], bbox[1]
+                    angle_rad = np.arctan2(p2[1] - p1[1], p2[0] - p1[0])
+                    angle_deg = np.degrees(angle_rad)
+                    
+                    # Normalizza l'angolo tra -90 e 90
+                    if angle_deg > 90:
+                        angle_deg -= 180
+                    elif angle_deg < -90:
+                        angle_deg += 180
+                        
+                    angles.append(angle_deg)
+                
+                if angles:
+                    document_rotation = np.median(angles)  # Usa mediana per robustezza
+                    
+                    # Applica correzione se necessario (soglia di 5 gradi)
+                    if abs(document_rotation) > 5:
+                        rotation_applied = -document_rotation
+                        corrected_img = utils.rotate_image(img_array, rotation_applied)
+                        logger.info(f"Applied rotation correction: {rotation_applied:.2f}°")
+                        
+                        # Re-applica OCR sull'immagine corretta
+                        logger.info("Performing OCR on rotation-corrected image...")
+                        result = ocr.ocr(corrected_img, cls=True)
+                    else:
+                        # Usa il risultato iniziale se non serve correzione
+                        result = initial_result
+                        logger.info("No rotation correction needed")
+                else:
+                    result = initial_result
+                    logger.info("Could not determine rotation angle, using original image")
+            else:
+                logger.info("No text detected for rotation analysis, using original image")
+                result = initial_result
+                
+        except Exception as rotation_error:
+            logger.warning(f"Rotation detection failed: {rotation_error}, proceeding with original image")
+            result = ocr.ocr(img_array, cls=True)
+            rotation_applied = 0
 
-        # Ordina i risultati
+        # Step 2: Ordina i risultati
         sorted_result = utils.sort_text_blocks(result)
         
-        
-        # Process results
-        # Process results
+        # Step 3: Process results
         extracted_text = []
         confidences = []
+        
         for idx in range(len(sorted_result)):
             res = sorted_result[idx]
             if res is None:
@@ -117,21 +171,21 @@ async def perform_ocr(
                 extracted_text.append({
                     "text": text,
                     "confidence": round(confidence, 4),
-                    # "bbox": bbox,
-                    # "bbox_center": {
-                    #     "x": round(sum([point[0] for point in bbox]) / 4, 2),
-                    #     "y": round(sum([point[1] for point in bbox]) / 4, 2)
-                    # }
                 })
         
         avg_confidence = round(sum(confidences) / len(confidences), 4) if confidences else 0.0
         
-        logger.info(f"Advanced OCR completed, found {len(extracted_text)} elements, avg confidence: {avg_confidence}")
+        logger.info(f"OCR completed: {len(extracted_text)} elements, avg confidence: {avg_confidence}, rotation: {rotation_applied:.2f}°")
         
         return JSONResponse({
             "success": True,
             "results": extracted_text,
             "total_text": "\n".join([item['text'] for item in extracted_text]),
+            "rotation_correction": {
+                "original_rotation_detected": round(-rotation_applied, 2) if rotation_applied != 0 else 0,
+                "correction_applied": round(rotation_applied, 2),
+                "was_corrected": rotation_applied != 0
+            },
             "statistics": {
                 "total_blocks": len(extracted_text),
                 "average_confidence": avg_confidence,
@@ -149,6 +203,7 @@ async def perform_ocr(
         
     except Exception as e:
         logger.error(f"OCR processing failed: {e}")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"OCR processing failed: {str(e)}")
 
 

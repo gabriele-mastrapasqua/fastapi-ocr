@@ -1,3 +1,6 @@
+import cv2
+import numpy as np
+from PIL import Image
 
 def sort_text_blocks(results):
     """
@@ -40,3 +43,29 @@ def sort_text_blocks(results):
         ])
     
     return [sorted_results]
+
+def rotate_image(image, angle):
+    """
+    Ruota un'immagine dell'angolo specificato
+    """
+    (h, w) = image.shape[:2]
+    center = (w // 2, h // 2)
+    
+    # Calcola la matrice di rotazione
+    rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+    
+    # Calcola le nuove dimensioni dell'immagine
+    cos = np.abs(rotation_matrix[0, 0])
+    sin = np.abs(rotation_matrix[0, 1])
+    new_w = int((h * sin) + (w * cos))
+    new_h = int((h * cos) + (w * sin))
+    
+    # Aggiusta la matrice di rotazione per tenere conto della traslazione
+    rotation_matrix[0, 2] += (new_w / 2) - center[0]
+    rotation_matrix[1, 2] += (new_h / 2) - center[1]
+    
+    # Applica la rotazione
+    rotated = cv2.warpAffine(image, rotation_matrix, (new_w, new_h), 
+                           flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+    
+    return rotated
