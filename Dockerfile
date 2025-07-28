@@ -7,6 +7,9 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     libgl1-mesa-glx \
     libglib2.0-0 \
+    tesseract-ocr \
+    tesseract-ocr-ita \
+    tesseract-ocr-eng \
     libsm6 \
     libxext6 \
     libxrender1 \
@@ -14,6 +17,10 @@ RUN apt-get update && \
     libgfortran5 \
     curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Verify tesseract languages
+RUN tesseract --list-langs
+
 
 # Set environment variables for headless operation
 ENV OPENCV_IO_ENABLE_OPENEXR=1

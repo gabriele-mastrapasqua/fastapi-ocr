@@ -19,3 +19,5 @@ scipy>=1.10.0,<2.0.0
 
 # Utilities base
 requests>=2.31.0,<3.0.0
+
+pytesseract>=0.3.13  # Versione più recente che dovrebbe supportare NumPy 2.x
