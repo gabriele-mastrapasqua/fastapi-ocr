@@ -21,7 +21,7 @@ help:
 
 # Build Docker images
 build:
-	$(compose) $(compose_file) build
+	$(compose) $(compose_file) build --no-cache --pull
 
 # Start services
 up:
