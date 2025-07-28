@@ -30,7 +30,10 @@ try:
         show_log=True,
         det_model_dir=None,  # Usa modelli default
         rec_model_dir=None,
-        cls_model_dir=None
+        #cls_model_dir=None,
+        cls_model_dir="/root/.paddleocr/whl/cls/ch_ppocr_mobile_v2.0_cls_infer/",
+        cpu_threads=os.cpu_count(), 
+        
     )
     logger.info("PaddleOCR initialized successfully")
 
@@ -94,62 +97,19 @@ async def perform_ocr(
         ocr.rec_batch_num = rec_batch_num
         ocr.max_text_length = max_text_length
 
-        original_img = img_array.copy()
+
+        #rotation_angle = utils.detect_image_rotation(image_path=img_array, num_samples=3)
+        #logger.info(f"Detected rotation angle: {rotation_angle} degrees")
+        #raise Exception(f"Simulated error for testing purposes... angle detected: {rotation_angle}")
+
+        # TEST 
+        #rotation_applied = -90
         rotation_applied = 0
-        corrected_img = img_array
-        
-        # Step 1: Rileva la rotazione usando solo il full OCR 
-        # (evita il problema con rec=False, cls=False)
-        logger.info("Detecting document rotation...")
-        
-        try:
-            # Usa OCR completo per rilevare rotazione
-            initial_result = ocr.ocr(img_array, cls=True)
-            
-            if initial_result and initial_result[0] and len(initial_result[0]) > 0:
-                # Calcola l'angolo di rotazione dai bounding box
-                angles = []
-                for line in initial_result[0]:
-                    bbox = line[0]
-                    p1, p2 = bbox[0], bbox[1]
-                    angle_rad = np.arctan2(p2[1] - p1[1], p2[0] - p1[0])
-                    angle_deg = np.degrees(angle_rad)
-                    
-                    # Normalizza l'angolo tra -90 e 90
-                    if angle_deg > 90:
-                        angle_deg -= 180
-                    elif angle_deg < -90:
-                        angle_deg += 180
-                        
-                    angles.append(angle_deg)
-                
-                if angles:
-                    document_rotation = np.median(angles)  # Usa mediana per robustezza
-                    
-                    # Applica correzione se necessario (soglia di 5 gradi)
-                    if abs(document_rotation) > 5:
-                        rotation_applied = -document_rotation
-                        corrected_img = utils.rotate_image(img_array, rotation_applied)
-                        logger.info(f"Applied rotation correction: {rotation_applied:.2f}°")
-                        
-                        # Re-applica OCR sull'immagine corretta
-                        logger.info("Performing OCR on rotation-corrected image...")
-                        result = ocr.ocr(corrected_img, cls=True)
-                    else:
-                        # Usa il risultato iniziale se non serve correzione
-                        result = initial_result
-                        logger.info("No rotation correction needed")
-                else:
-                    result = initial_result
-                    logger.info("Could not determine rotation angle, using original image")
-            else:
-                logger.info("No text detected for rotation analysis, using original image")
-                result = initial_result
-                
-        except Exception as rotation_error:
-            logger.warning(f"Rotation detection failed: {rotation_error}, proceeding with original image")
-            result = ocr.ocr(img_array, cls=True)
-            rotation_applied = 0
+        img_array = utils.rotate_image_numpy(img_array, angle=rotation_applied)  # Forza rotazione a 0 per test
+
+        # Usa OCR con paddleOCR per migliori risultati
+        initial_result = ocr.ocr(img_array, cls=True)
+        result = initial_result
 
         # Step 2: Ordina i risultati
         sorted_result = utils.sort_text_blocks(result)

@@ -1,19 +1,21 @@
 # FastAPI e server
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-python-multipart==0.0.6
+fastapi>=0.104.0,<0.105.0
+uvicorn[standard]>=0.24.0,<0.25.0
+python-multipart>=0.0.6,<0.1.0
 
-# PaddlePaddle CPU - versione stabile LTS
-paddlepaddle==2.6.2
+# PaddlePaddle CPU - versione flessibile
+paddlepaddle>=2.6.0,<3.0.0
 
-# PaddleOCR - versione compatibile
-paddleocr==2.7.3
+# PaddleOCR - versione flessibile
+paddleocr>=2.7.0,<3.0.0
 
-# Image processing - versioni molto stabili
+# Image processing - versioni flessibili per ARM64
 opencv-python-headless>=4.8.0,<5.0.0
+Pillow>=9.5.0,<11.0.0
+numpy>=1.24.0,<2.0.0
 
-Pillow>=10.0.0
-numpy==1.24.3
+# Scientific computing per rotation detection avanzata
+scipy>=1.10.0,<2.0.0
 
 # Utilities base
-requests==2.31.0
+requests>=2.31.0,<3.0.0

@@ -1,6 +1,9 @@
 import cv2
 import numpy as np
+from scipy import ndimage
 from PIL import Image
+import paddleocr
+
 
 def sort_text_blocks(results):
     """
@@ -44,7 +47,9 @@ def sort_text_blocks(results):
     
     return [sorted_results]
 
-def rotate_image(image, angle):
+
+
+def rotate_image_numpy(image, angle):
     """
     Ruota un'immagine dell'angolo specificato
     """
