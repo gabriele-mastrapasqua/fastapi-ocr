@@ -15,3 +15,8 @@ stop with
 ```sh
 make down
 ```
+
+force rebuild with 
+```sh
+make build
+```
