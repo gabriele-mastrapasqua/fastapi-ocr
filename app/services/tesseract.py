@@ -136,6 +136,8 @@ class TesseractOCREngine:
         self.lang = lang
         self.ocr_config = ocr_config
         self.max_workers = min(4, mp.cpu_count())
+        logger.info(f"CPU count from multiprocessing: {mp.cpu_count()}")
+        logger.info(f"Initializing TesseractOCREngine with lang={self.lang}, config={self.ocr_config}, max_workers={self.max_workers}")
         
         # OTTIMIZZAZIONI TESSERACT
         # Aggiungi opzioni per velocizzare Tesseract
