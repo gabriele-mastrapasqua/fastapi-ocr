@@ -81,7 +81,7 @@ class PaddleOCREngine:
         self.ocr.rec_batch_num = rec_batch_num
         self.ocr.max_text_length = max_text_length
 
-        # TODO detect rotation of the image and rotate to improve OCR results
+        # detect rotation of the image and rotate to improve OCR results
         angle_rotation_detected, image_needs_rotation = utils.detect_angle_rotation_tesseract(preproc_img=image)
         logger.info(f"Detected rotation angle: {angle_rotation_detected} degrees")
 

@@ -14,6 +14,7 @@ import pdfplumber
 import tempfile
 
 import app.services.paddleocr as paddleocr
+import app.services.tesseract as tesseract
 
 # Setup logging
 import logging
@@ -23,6 +24,7 @@ logger.setLevel(logging.INFO)  # Imposta solo il livello
 app = FastAPI(title="PaddleOCR API", version="1.0.0")
 
 paddleOcrEngine = paddleocr.PaddleOCREngine(lang="it")
+tesseractOCREngine = tesseract.TesseractOCREngine(lang="ita", ocr_config="--psm 11")
 
 
 @app.get("/")
@@ -68,7 +70,7 @@ async def perform_ocr(
         ocr = paddleOcrEngine
     elif engine == Engine.tesseract:
         # TODO - implement tesseract OCR
-        ocr = paddleOcrEngine
+        ocr = tesseractOCREngine
 
     if ocr is None:
         raise HTTPException(status_code=503, detail="OCR service not available")
@@ -82,11 +84,25 @@ async def perform_ocr(
             logger.info(f"PDF converted to {num_pages_in_pdf} images")
             if not images:
                 raise HTTPException(status_code=400, detail="No pages found in PDF")
+            
             results = []
-            for image in images:
-                logger.info(f"Performing OCR on image {image} with force_angle_rotation={force_angle_rotation}")
-                response = ocr.execute_ocr(image, force_angle_rotation=force_angle_rotation)
+            if engine == Engine.tesseract or (engine == Engine.auto and num_pages_in_pdf > 2):
+                # check page count, if > 2 use tesseract, else use paddleOCR
+                ocr = tesseractOCREngine
+                logger.info(f"Using Tesseract OCR for {num_pages_in_pdf} pages")
+                # tesseract can run multiple pages in parallel to speed up him.
+                response = ocr.execute_ocr(images, force_angle_rotation=force_angle_rotation)
                 results.append(response)
+            else:
+                # Use paddleOCR for small PDFs for high quality results
+                # paddle is much slower
+                logger.info(f"Using PaddleOCR for {num_pages_in_pdf} pages")
+                
+                for image in images:
+                    logger.info(f"Performing OCR on image {image} with force_angle_rotation={force_angle_rotation}")
+                    response = ocr.execute_ocr(image, force_angle_rotation=force_angle_rotation)
+                    results.append(response)
+
             return JSONResponse({"results": results, "num_pages": num_pages_in_pdf})
             
         elif file_type == "Image":

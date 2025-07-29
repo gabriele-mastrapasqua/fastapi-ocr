@@ -8,6 +8,7 @@ import pdfplumber
 import tempfile
 import io
 import base64
+import os
 
 def pdf_to_images(contents, base_64 = False):
     """
@@ -18,29 +19,33 @@ def pdf_to_images(contents, base_64 = False):
 
     Returns: list of images (PIL Image or base64 strings). + num pages in PDF
     """
-    tmp_file_path = None
-    with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
-        tmp_file.write(contents)
-        tmp_file_path = tmp_file.name
-        
-    images = []
-    with pdfplumber.open(tmp_file_path) as pdf:
-        num_pages = len(pdf.pages)
-        for page in pdf.pages:
-            # Convert page to image
-            # Use resolution=300 for better quality
-            # You can adjust the resolution as needed
-            image = page.to_image(resolution=300).original
-            if base_64:
-                # Convert PIL Image to base64 string
-                buffered = io.BytesIO()
-                image.save(buffered, format="PNG")
-                img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-                images.append(img_str)
-            else:
-                # Append PIL Image directly
-                images.append(image)
+    try:
+        tmp_file_path = None
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
+            tmp_file.write(contents)
+            tmp_file_path = tmp_file.name
             
+        images = []
+        with pdfplumber.open(tmp_file_path) as pdf:
+            num_pages = len(pdf.pages)
+            for page in pdf.pages:
+                # Convert page to image
+                # Use resolution=300 for better quality
+                # You can adjust the resolution as needed
+                image = page.to_image(resolution=300).original
+                if base_64:
+                    # Convert PIL Image to base64 string
+                    buffered = io.BytesIO()
+                    image.save(buffered, format="PNG")
+                    img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+                    images.append(img_str)
+                else:
+                    # Append PIL Image directly
+                    images.append(image)
+    finally:
+        # Clean up temp file
+        os.unlink(tmp_file_path)    
+    
     return images, num_pages
 
 def sort_text_blocks(results):
@@ -113,6 +118,11 @@ def rotate_image_numpy(image, angle):
     
     return rotated
 
+def rotate_image_pil(image: Image.Image, angle: int) -> Image.Image:
+    """
+    Ruota un'immagine PIL dell'angolo specificato.
+    """
+    return image.rotate(angle, expand=True)
 
 def detect_angle_rotation_tesseract(preproc_img: Image.Image) -> int:
     """
@@ -148,3 +158,42 @@ def detect_angle_rotation_tesseract(preproc_img: Image.Image) -> int:
         
     return 0, needs_rotation
 
+def preprocess_image_for_ocr_tesseract(img_page: Image.Image) -> Image.Image:
+    """Preprocess the image for OCR by converting to BGR, applying grayscale and thresholding."""
+    img = np.array(img_page)
+    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+    
+    # Aumenta saturazione e contrasto x mantenere blu e altri colori meglio come nero dopo threshold
+    '''
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    h, s, v = cv2.split(hsv)
+    s = cv2.equalizeHist(s)
+    v = cv2.equalizeHist(v)
+    hsv_eq = cv2.merge((h, s, v))
+    img = cv2.cvtColor(hsv_eq, cv2.COLOR_HSV2BGR)
+    '''
+
+    # converti in grayscale
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # Apply adaptive thresholding
+    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    preproc_img = Image.fromarray(thresh)
+
+    return preproc_img
+
+
+def calculate_ocr_score_tesseract(preproc_img: Image.Image) -> float:
+    from pytesseract import Output
+    
+    data = pytesseract.image_to_data(preproc_img, output_type=Output.DICT)
+    confidences = [int(conf) for conf in data['conf'] if conf != '-1']
+    if not confidences:
+        return 0
+    avg_score = sum(confidences) / len(confidences)
+    ocr_score = round(avg_score, 2)
+    return ocr_score
+
+def clean_text(text):
+    import re
+    return re.sub(r"^[e®=]", "- ", text, flags=re.MULTILINE)
