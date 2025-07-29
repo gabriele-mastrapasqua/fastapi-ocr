@@ -78,7 +78,8 @@ def ocr_single_page_worker(page_data: Tuple[int, int, bytes, str, str, int]) -> 
         else:
             # OTTIMIZZAZIONE 3: Usa detection veloce
             profile_print(f"→ Page {page_num + 1}: Using FAST rotation detection...")
-            angle_rotation_detected, image_needs_rotation = utils.detect_angle_rotation_tesseract_fast(preproc_img)
+            #angle_rotation_detected, image_needs_rotation = utils.detect_angle_rotation_tesseract_fast(preproc_img)
+            angle_rotation_detected, image_needs_rotation = utils.detect_angle_rotation_tesseract(preproc_img)
             profile_print(f"→ Page {page_num + 1}: Rotation detection completed - Angle: {angle_rotation_detected}°", rotation_start)
 
         # STEP 5: Image rotation se necessaria
@@ -156,8 +157,18 @@ class TesseractOCREngine:
         profile_print(f"   - Config: {self.ocr_config}")
         profile_print(f"   - Max workers: {self.max_workers}")
 
+
     def execute_ocr(self, 
-            images,                         
+            images: Image.Image,                         
+            force_angle_rotation=0, 
+    ):
+        if isinstance(images, list):
+            return self.execute_ocr_list(images, force_angle_rotation=force_angle_rotation)
+        else:
+            return self.execute_ocr_list([images], force_angle_rotation=force_angle_rotation)
+        
+    def execute_ocr_list(self, 
+            images: List[Image.Image],                         
             force_angle_rotation=0, 
     ):
         """
