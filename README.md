@@ -36,18 +36,17 @@ version: '3.8'
 services:
   # FastAPI ocr service
   fastapi-ocr-api:
+    platform: linux/amd64
     image: gabrielem0/fastapi-ocr:latest
     container_name: fastapi-ocr-api
     ports:
       - "9292:9292"
     volumes:
-      - .:/app
       - paddle_models_cpu:/root/.paddle
       - paddleocr_models_cpu:/root/.paddleocr
     environment:
       - DEVICE=cpu
     restart: unless-stopped
-
 
 volumes:
   paddle_models_cpu:
