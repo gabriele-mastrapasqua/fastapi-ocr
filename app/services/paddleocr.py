@@ -65,6 +65,21 @@ class PaddleOCREngine:
         :param force_angle_rotation: If not 0, forces the rotation of the image before OCR.
         :return: The OCR results.
         """
+
+         
+        current_mp = (image.size[0] * image.size[1]) / 1000000
+
+        # OTTIMIZZAZIONE CRITICA: Ridimensiona SEMPRE se > 1MP
+        if current_mp > 1.0:
+            #img_page = utils.resize_image_for_fast_ocr(img_page, target_mp=0.8)
+            #image = utils.resize_image_for_fast_ocr(image, target_mp=2.0)
+            image = utils.smart_resize_for_ocr(image, min_mp=2.0, )
+            #image = utils.enhance_image_for_ocr(image)
+            logger.info(f"Image resized to {image.size} for fast OCR processing")
+        else:
+            logger.info(f"Image size {image.size} is within limits, no resizing needed")
+
+
         
         # Convert PIL to OpenCV format
         img_array = np.array(image)

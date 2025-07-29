@@ -42,6 +42,107 @@ def resize_image_for_fast_ocr(img: Image.Image, target_mp: float = 0.8) -> Image
     # LANCZOS per qualità ottimale
     return img.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
+def smart_resize_for_ocr(img: Image.Image, max_dimension: int = 2000, min_mp: float = 2.0) -> Image.Image:
+    """
+    Resize intelligente che mantiene la qualità OCR.
+    
+    Args:
+        img: Immagine PIL
+        max_dimension: Dimensione massima per lato (default: 2000px)
+        min_mp: Megapixel minimi da mantenere (default: 2.0MP)
+    
+    Returns:
+        Immagine ridimensionata mantenendo qualità OCR
+    """
+    current_mp = (img.size[0] * img.size[1]) / 1000000
+    width, height = img.size
+    max_current_dimension = max(width, height)
+    
+    print(f"   → Original: {img.size} ({current_mp:.2f}MP)", flush=True)
+    
+    # Se l'immagine è già piccola, non toccarla
+    if current_mp <= min_mp and max_current_dimension <= max_dimension:
+        print(f"   → Image already optimal, no resize needed", flush=True)
+        return img
+    
+    # Calcola nuovo resize basato su dimensione massima E megapixel minimi
+    scale_by_dimension = max_dimension / max_current_dimension if max_current_dimension > max_dimension else 1.0
+    scale_by_mp = (min_mp / current_mp) ** 0.5 if current_mp > min_mp else 1.0
+    
+    # Usa il fattore più conservativo (che riduce meno)
+    scale_factor = max(scale_by_dimension, scale_by_mp)
+    
+    # Non ridimensionare se il fattore è molto vicino a 1
+    if scale_factor > 0.9:
+        print(f"   → Scale factor {scale_factor:.3f} too close to 1, keeping original", flush=True)
+        return img
+    
+    new_width = int(width * scale_factor)
+    new_height = int(height * scale_factor)
+    new_mp = (new_width * new_height) / 1000000
+    
+    print(f"   → QUALITY RESIZE: {img.size} ({current_mp:.2f}MP) → ({new_width}x{new_height}) ({new_mp:.2f}MP)", flush=True)
+    print(f"   → Scale factor: {scale_factor:.3f}", flush=True)
+    
+    # Usa LANCZOS per qualità ottimale
+    return img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+def enhance_image_for_ocr(img: Image.Image) -> Image.Image:
+    """
+    Migliora l'immagine per OCR mantenendo le dimensioni.
+    Applica solo miglioramenti che non cambiano la risoluzione.
+    """
+    enhance_start = time.time()
+    
+    # Se già in grayscale, applica solo sharpening leggero
+    if img.mode == 'L':
+        # Sharpening leggero per migliorare il testo
+        from PIL import ImageFilter, ImageEnhance
+        
+        # Applica un leggero sharpening
+        sharpened = img.filter(ImageFilter.UnsharpMask(radius=1, percent=120, threshold=3))
+        
+        # Migliora contrasto leggermente
+        enhancer = ImageEnhance.Contrast(sharpened)
+        enhanced = enhancer.enhance(1.1)
+        
+        enhance_time = time.time() - enhance_start
+        print(f"   → Image enhancement completed in {enhance_time:.3f}s", flush=True)
+        return enhanced
+    
+    # Se a colori, converti a grayscale con preprocessing ottimizzato
+    import cv2
+    import numpy as np
+    
+    # Converti PIL a numpy
+    img_array = np.array(img)
+    
+    # Converti a BGR per OpenCV
+    if img.mode == 'RGB':
+        img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+    else:
+        img_bgr = img_array
+    
+    # Converti a grayscale
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    
+    # Applica CLAHE (Contrast Limited Adaptive Histogram Equalization) 
+    # per migliorare il contrasto locale
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    enhanced = clahe.apply(gray)
+    
+    # Applica threshold adattivo per migliorare il testo
+    # Ma solo se aiuta (alcuni documenti sono già ben contrastati)
+    mean_brightness = np.mean(enhanced)
+    if mean_brightness < 200:  # Solo se l'immagine non è già molto chiara
+        enhanced = cv2.adaptiveThreshold(enhanced, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+    
+    # Riconverti a PIL
+    result = Image.fromarray(enhanced, mode='L')
+    
+    enhance_time = time.time() - enhance_start
+    print(f"   → Advanced image enhancement completed in {enhance_time:.3f}s", flush=True)
+    return result
 
 def pdf_to_images(contents, base_64 = False):
     """
