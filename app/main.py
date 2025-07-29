@@ -24,7 +24,33 @@ logger.setLevel(logging.INFO)  # Imposta solo il livello
 app = FastAPI(title="PaddleOCR API", version="1.0.0")
 
 paddleOcrEngine = paddleocr.PaddleOCREngine(lang="it")
+
+def ultra_fast_tesseract_ocr_config(base_psm: str = "6") -> str:
+    """
+    Genera config Tesseract ottimizzato per massima velocità.
+    """
+    speed_optimizations = [
+        f"--psm {base_psm}",  # PSM 6 è più veloce di 11 per la maggior parte dei casi
+        "-c tessedit_do_invert=0",
+        "-c load_system_dawg=0",
+        "-c load_freq_dawg=0", 
+        "-c load_punc_dawg=0",
+        "-c load_number_dawg=0",
+        "-c load_unambig_dawg=0",
+        "-c load_bigram_dawg=0",
+        "-c load_fixed_length_dawgs=0",
+        "-c preserve_interword_spaces=1",
+        "-c tessedit_make_box_file=0",
+        "-c tessedit_write_images=0",
+        # Riduci accuratezza per velocità
+        "-c tessedit_pageseg_mode=" + base_psm,
+        "-c classify_bln_numeric_mode=0",
+    ]
+    
+    return " ".join(speed_optimizations)
+
 tesseractOCREngine = tesseract.TesseractOCREngine(lang="ita", ocr_config="--psm 11")
+#tesseractOCREngine = tesseract.TesseractOCREngine(lang="ita", ocr_config=ultra_fast_tesseract_ocr_config(base_psm="6"))
 
 
 @app.get("/")
@@ -91,7 +117,11 @@ async def perform_ocr(
                 ocr = tesseractOCREngine
                 logger.info(f"Using Tesseract OCR for {num_pages_in_pdf} pages")
                 # tesseract can run multiple pages in parallel to speed up him.
+                
                 response = ocr.execute_ocr(images, force_angle_rotation=force_angle_rotation)
+                #response = ocr.execute_ocr_performance_test(images, force_angle_rotation=force_angle_rotation)
+
+
                 results.append(response)
             else:
                 # Use paddleOCR for small PDFs for high quality results

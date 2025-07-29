@@ -11,6 +11,8 @@ from typing import List, Optional, Dict, Any, Tuple
 import io
 from PIL import Image
 
+import app.services.test_tesseract_config as test_config
+
 # Setup logging
 import logging
 logger = logging.getLogger(__name__)
@@ -48,7 +50,22 @@ def ocr_single_page_worker(page_data: Tuple[int, int, bytes, str, str, int]) -> 
         # STEP 2: Image loading da bytes
         load_start = profile_print(f"→ Page {page_num + 1}: Loading image from bytes ({len(image_bytes)} bytes)...")
         img_page = Image.open(io.BytesIO(image_bytes))
-        profile_print(f"→ Page {page_num + 1}: Image loaded - Size: {img_page.size}, Mode: {img_page.mode}", load_start)
+        current_mp = (img_page.size[0] * img_page.size[1]) / 1000000
+        profile_print(f"→ Page {page_num + 1}: Loaded {img_page.size} ({current_mp:.2f}MP)", load_start)
+
+        
+        # STEP 2: RESIZE CRITICO - Questa è la chiave!
+        resize_start = profile_print(f"→ Page {page_num + 1}: Resizing for fast OCR...")
+        
+        # OTTIMIZZAZIONE CRITICA: Ridimensiona SEMPRE se > 1MP
+        if current_mp > 1.0:
+            #img_page = utils.resize_image_for_fast_ocr(img_page, target_mp=0.8)
+            img_page = utils.resize_image_for_fast_ocr(img_page, target_mp=2.0)
+            profile_print(f"→ Page {page_num + 1}: Image resized for speed", resize_start)
+        else:
+            profile_print(f"→ Page {page_num + 1}: Image already small, no resize needed", resize_start)
+
+
 
         # STEP 3: Preprocessing (OTTIMIZZATO)
         preproc_start = profile_print(f"→ Page {page_num + 1}: Starting preprocessing...")
@@ -97,6 +114,11 @@ def ocr_single_page_worker(page_data: Tuple[int, int, bytes, str, str, int]) -> 
         ocr_start = profile_print(f"→ Page {page_num + 1}: Starting Tesseract OCR...")
         profile_print(f"→ Page {page_num + 1}: OCR Config: '{ocr_config}', Lang: '{ocr_lang}'")
         
+        # CONFIG OTTIMALE basato sui test
+        optimal_config = "--psm 6 -c tessedit_pageseg_mode=6 -c preserve_interword_spaces=1 -c tessedit_do_invert=0 -c tessedit_make_box_file=0 -c tessedit_write_images=0 -c classify_bln_numeric_mode=0"
+        #ocr_config = optimal_config
+        print(f"Using Tesseract optimal OCR config: {ocr_config}")
+
         # OTTIMIZZAZIONE: Usa image_to_string direttamente invece di image_to_data se non serve struttura
         ocr_text = pytesseract.image_to_string(preproc_img, config=ocr_config, lang=ocr_lang)
         profile_print(f"→ Page {page_num + 1}: Tesseract OCR completed - Text length: {len(ocr_text)}", ocr_start)
@@ -277,3 +299,46 @@ class TesseractOCREngine:
             },
             "device": 'cpu'
         }
+    
+
+    
+    def execute_ocr_performance_test(self, images, force_angle_rotation=0):
+        """
+        Esegue test performance per identificare ottimizzazioni migliori.
+        """
+        print(f"🔬 STARTING PERFORMANCE TEST - {len(images)} images", flush=True)
+        
+        # Usa risoluzione bassa per test
+        resolution = 100
+        tasks = []
+        all_text = []
+        
+        for i, image in enumerate(images):
+            # Analizza immagine prima di processarla
+            analysis = test_config.analyze_image_for_ocr(image)
+            print(f"📊 Image {i+1} analysis: {analysis}", flush=True)
+            
+            buf = io.BytesIO()
+            # Usa JPEG qualità media per velocità
+            image.save(buf, format="JPEG", quality=85, optimize=True)
+            img_bytes = buf.getvalue()
+            tasks.append((i, resolution, img_bytes, self.lang, self.ocr_config, force_angle_rotation))
+            all_text.append(None)
+
+        # Process con performance test worker
+        with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
+            future_to_page = {
+                executor.submit(test_config.ocr_single_page_worker_performance_test, task): task[0] 
+                for task in tasks
+            }
+            
+            for future in as_completed(future_to_page):
+                try:
+                    page_num, ocr_text, ocr_score, rotation_applied = future.result()
+                    all_text[page_num] = ocr_text
+                except Exception as e:
+                    page_num = future_to_page[future]
+                    print(f"❌ Page {page_num + 1} failed: {str(e)}", flush=True)
+                    all_text[page_num] = ""
+        
+        return "\n".join(all_text)

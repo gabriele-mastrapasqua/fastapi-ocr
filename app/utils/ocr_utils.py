@@ -21,6 +21,28 @@ def profile_print(msg, start_time=None):
         print(f"[{current_time:.3f}] {msg}", flush=True)
     return current_time
 
+
+def resize_image_for_fast_ocr(img: Image.Image, target_mp: float = 0.8) -> Image.Image:
+    """
+    Ridimensiona intelligentemente per OCR veloce.
+    QUESTA È LA CHIAVE DELLE PERFORMANCE!
+    """
+    current_mp = (img.size[0] * img.size[1]) / 1000000
+    
+    if current_mp <= target_mp:
+        return img
+    
+    # Calcola fattore di scala per raggiungere target megapixel
+    scale_factor = (target_mp / current_mp) ** 0.5
+    new_width = int(img.size[0] * scale_factor)
+    new_height = int(img.size[1] * scale_factor)
+    
+    print(f"   → CRITICAL RESIZE: {img.size} ({current_mp:.2f}MP) → ({new_width}x{new_height}) ({target_mp:.2f}MP)", flush=True)
+    
+    # LANCZOS per qualità ottimale
+    return img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+
 def pdf_to_images(contents, base_64 = False):
     """
     Convert a PDF file bytes content to a list of images.
