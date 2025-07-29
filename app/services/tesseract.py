@@ -135,7 +135,7 @@ class TesseractOCREngine:
     def __init__(self, lang="ita", ocr_config="--psm 11"):
         self.lang = lang
         self.ocr_config = ocr_config
-        self.max_workers = min(4, mp.cpu_count())
+        self.max_workers = min(4, mp.cpu_count() * 2)
         
         # OTTIMIZZAZIONI TESSERACT
         # Aggiungi opzioni per velocizzare Tesseract
