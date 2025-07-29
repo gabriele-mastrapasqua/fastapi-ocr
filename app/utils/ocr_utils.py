@@ -9,6 +9,17 @@ import tempfile
 import io
 import base64
 import os
+import time
+
+def profile_print(msg, start_time=None):
+    """Print con timestamp per profiling - force flush per Docker"""
+    current_time = time.time()
+    if start_time:
+        elapsed = current_time - start_time
+        print(f"[{current_time:.3f}] {msg} (+{elapsed:.3f}s)", flush=True)
+    else:
+        print(f"[{current_time:.3f}] {msg}", flush=True)
+    return current_time
 
 def pdf_to_images(contents, base_64 = False):
     """
@@ -30,9 +41,7 @@ def pdf_to_images(contents, base_64 = False):
             num_pages = len(pdf.pages)
             for page in pdf.pages:
                 # Convert page to image
-                # Use resolution=300 for better quality
-                # You can adjust the resolution as needed
-                image = page.to_image(resolution=300).original
+                image = page.to_image(resolution=300).original  # Era 300
                 if base_64:
                     # Convert PIL Image to base64 string
                     buffered = io.BytesIO()
@@ -90,8 +99,6 @@ def sort_text_blocks(results):
     
     return [sorted_results]
 
-
-
 def rotate_image_numpy(image, angle):
     """
     Ruota un'immagine dell'angolo specificato
@@ -121,79 +128,243 @@ def rotate_image_numpy(image, angle):
 def rotate_image_pil(image: Image.Image, angle: int) -> Image.Image:
     """
     Ruota un'immagine PIL dell'angolo specificato.
+    OTTIMIZZAZIONE: Usa expand=True per evitare crop
     """
-    return image.rotate(angle, expand=True)
+    rotation_start = profile_print(f"   → PIL rotation starting ({angle}°)...")
+    result = image.rotate(angle, expand=True)
+    profile_print(f"   → PIL rotation completed", rotation_start)
+    return result
 
-def detect_angle_rotation_tesseract(preproc_img: Image.Image) -> int:
+def detect_angle_rotation_tesseract(preproc_img: Image.Image) -> tuple:
     """
-    Detect angle retation using Tesseract OCR.
-    Returns the float angle value normalized to 0-360 degrees. 0 if no rotation is detected.
+    Detect angle rotation using Tesseract OCR.
+    ⚠️  QUESTA È LA FUNZIONE PIÙ LENTA! ⚠️ 
+    Returns (angle, needs_rotation)
     """
-    # Use Tesseract to find orientation
-    osd = pytesseract.image_to_osd(preproc_img)
-    print(f"OSD Output: {osd}\n")
-
-    # Estrai angolo di rotazione
-    rotation_line = [line for line in osd.split('\n') if "Orientation in degrees" in line]
-    if rotation_line:
-        angle = int(rotation_line[0].split(":")[1].strip())
-        print(f"→ Rotazione rilevata: {angle}°")
-
-        """
-        Orientation in degrees	Rotazione del testo	        Azione da fare sull’immagine
-        0	                    Corretta	                Nessuna
-        90	                    Ruotata a destra	        Ruotare -90° (a sinistra)
-        180	                    Capovolta	                Ruotare -180°
-        270	                    Ruotata a sinistra	        Ruotare -90° (a destra)
-        """
-
-        # Correggi l'immagine se necessario
-        needs_rotation = angle != 0
-        if angle != 0:
-            corrected_angle = - ((360 - angle) % 360)
-            return corrected_angle, needs_rotation
+    osd_start = profile_print(f"   → OSD detection starting...")
+    
+    try:
+        # COLLO DI BOTTIGLIA PRINCIPALE: image_to_osd è MOLTO lento
+        osd = pytesseract.image_to_osd(preproc_img)
+        profile_print(f"   → OSD detection completed", osd_start)
         
-    else:
-        print("→ Nessun angolo di rotazione rilevato, immagine non modificata.")
+        profile_print(f"   → OSD Output: {osd}")
+
+        # Estrai angolo di rotazione
+        rotation_line = [line for line in osd.split('\n') if "Orientation in degrees" in line]
+        if rotation_line:
+            angle = int(rotation_line[0].split(":")[1].strip())
+            profile_print(f"   → Rotation detected: {angle}°")
+
+            needs_rotation = angle != 0
+            if angle != 0:
+                corrected_angle = - ((360 - angle) % 360)
+                return corrected_angle, needs_rotation
         
-    return 0, needs_rotation
+        profile_print(f"   → No rotation needed")
+        return 0, False
+        
+    except Exception as e:
+        profile_print(f"   → OSD detection FAILED: {str(e)}", osd_start)
+        return 0, False
+
+def detect_angle_rotation_tesseract_fast(preproc_img: Image.Image) -> tuple:
+    """
+    VERSIONE OTTIMIZZATA della detection di rotazione.
+    Usa un'immagine ridimensionata per velocizzare OSD.
+    """
+    osd_start = profile_print(f"   → FAST OSD detection starting...")
+    
+    try:
+        # OTTIMIZZAZIONE 1: Ridimensiona l'immagine per OSD
+        original_size = preproc_img.size
+        scale_factor = min(800 / max(original_size), 1.0)  # Max 800px sulla dimensione maggiore
+        
+        if scale_factor < 1.0:
+            new_size = (int(original_size[0] * scale_factor), int(original_size[1] * scale_factor))
+            small_img = preproc_img.resize(new_size, Image.Resampling.LANCZOS)
+            profile_print(f"   → Image resized from {original_size} to {new_size} for OSD")
+        else:
+            small_img = preproc_img
+            
+        # OTTIMIZZAZIONE 2: Config OSD ottimizzato
+        osd_config = "--psm 0 -c min_characters_to_try=10"
+        
+        osd = pytesseract.image_to_osd(small_img, config=osd_config)
+        profile_print(f"   → FAST OSD detection completed", osd_start)
+        
+        # Estrai angolo di rotazione
+        rotation_line = [line for line in osd.split('\n') if "Orientation in degrees" in line]
+        if rotation_line:
+            angle = int(rotation_line[0].split(":")[1].strip())
+            profile_print(f"   → Rotation detected: {angle}°")
+
+            needs_rotation = angle != 0
+            if angle != 0:
+                corrected_angle = - ((360 - angle) % 360)
+                return corrected_angle, needs_rotation
+        
+        profile_print(f"   → No rotation needed")
+        return 0, False
+        
+    except Exception as e:
+        profile_print(f"   → FAST OSD detection FAILED: {str(e)}", osd_start)
+        return 0, False
 
 def preprocess_image_for_ocr_tesseract(img_page: Image.Image) -> Image.Image:
-    """Preprocess the image for OCR by converting to BGR, applying grayscale and thresholding."""
+    """
+    Preprocess the image for OCR by converting to BGR, applying grayscale and thresholding.
+    VERSIONE OTTIMIZZATA con profiling.
+    """
+    preproc_start = profile_print(f"   → Image preprocessing starting...")
+    
+    # Conversione a numpy array
+    conv_start = profile_print(f"   → Converting PIL to numpy...")
     img = np.array(img_page)
     img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+    profile_print(f"   → PIL to numpy conversion completed", conv_start)
     
-    # Aumenta saturazione e contrasto x mantenere blu e altri colori meglio come nero dopo threshold
-    '''
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    h, s, v = cv2.split(hsv)
-    s = cv2.equalizeHist(s)
-    v = cv2.equalizeHist(v)
-    hsv_eq = cv2.merge((h, s, v))
-    img = cv2.cvtColor(hsv_eq, cv2.COLOR_HSV2BGR)
-    '''
-
-    # converti in grayscale
+    # OTTIMIZZAZIONE: Commenta la parte HSV che era già commentata
+    # per evitare elaborazioni non necessarie
+    
+    # Conversione grayscale
+    gray_start = profile_print(f"   → Converting to grayscale...")
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    profile_print(f"   → Grayscale conversion completed", gray_start)
 
     # Apply adaptive thresholding
+    thresh_start = profile_print(f"   → Applying OTSU thresholding...")
     _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    profile_print(f"   → OTSU thresholding completed", thresh_start)
+    
+    # Conversione back to PIL
+    pil_start = profile_print(f"   → Converting back to PIL...")
     preproc_img = Image.fromarray(thresh)
-
+    profile_print(f"   → PIL conversion completed", pil_start)
+    
+    profile_print(f"   → Image preprocessing COMPLETED", preproc_start)
     return preproc_img
 
+def preprocess_image_for_ocr_tesseract_fast(img_page: Image.Image) -> Image.Image:
+    """
+    VERSIONE ULTRA-VELOCE del preprocessing.
+    Skip operazioni non essenziali.
+    """
+    preproc_start = profile_print(f"   → FAST preprocessing starting...")
+    
+    # OTTIMIZZAZIONE: Se l'immagine è già in grayscale, skip conversioni
+    if img_page.mode == 'L':
+        profile_print(f"   → Image already grayscale, skipping conversions")
+        # Apply solo thresholding semplice
+        img_array = np.array(img_page)
+        _, thresh = cv2.threshold(img_array, 127, 255, cv2.THRESH_BINARY)
+        result = Image.fromarray(thresh)
+        profile_print(f"   → FAST preprocessing COMPLETED", preproc_start)
+        return result
+    
+    # Conversione diretta RGB -> Grayscale usando PIL (più veloce)
+    gray_img = img_page.convert('L')
+    
+    # Thresholding semplice invece di OTSU (più veloce)
+    img_array = np.array(gray_img)
+    _, thresh = cv2.threshold(img_array, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    
+    result = Image.fromarray(thresh)
+    profile_print(f"   → FAST preprocessing COMPLETED", preproc_start)
+    return result
 
 def calculate_ocr_score_tesseract(preproc_img: Image.Image) -> float:
+    """
+    ⚠️  QUESTO È UN ALTRO COLLO DI BOTTIGLIA! ⚠️ 
+    Fa una seconda passata OCR solo per calcolare il punteggio.
+    """
     from pytesseract import Output
     
+    score_start = profile_print(f"   → OCR score calculation starting...")
+    
+    # QUESTO È LENTO: fa un'altra chiamata a Tesseract
     data = pytesseract.image_to_data(preproc_img, output_type=Output.DICT)
+    profile_print(f"   → OCR data extraction completed", score_start)
+    
     confidences = [int(conf) for conf in data['conf'] if conf != '-1']
     if not confidences:
         return 0
     avg_score = sum(confidences) / len(confidences)
     ocr_score = round(avg_score, 2)
+    
+    profile_print(f"   → OCR score calculated: {ocr_score}")
     return ocr_score
 
+def calculate_ocr_score_fast(ocr_text: str) -> float:
+    """
+    VERSIONE VELOCE: calcola un punteggio approssimativo basato sul testo estratto
+    invece di fare una seconda chiamata a Tesseract.
+    """
+    if not ocr_text.strip():
+        return 0.0
+    
+    # Calcola un punteggio basato su:
+    # - Presenza di caratteri alfanumerici
+    # - Rapporto caratteri validi/totali
+    # - Presenza di parole complete
+    
+    total_chars = len(ocr_text)
+    if total_chars == 0:
+        return 0.0
+    
+    alphanumeric_chars = sum(1 for c in ocr_text if c.isalnum())
+    words = ocr_text.split()
+    valid_words = [w for w in words if len(w) > 2 and any(c.isalpha() for c in w)]
+    
+    # Score basato su diverse metriche
+    char_ratio = alphanumeric_chars / total_chars
+    word_ratio = len(valid_words) / max(len(words), 1)
+    
+    # Combina i punteggi
+    estimated_score = (char_ratio * 0.6 + word_ratio * 0.4) * 100
+    
+    return round(min(estimated_score, 100), 2)
+
 def clean_text(text):
+    """Ottimizzato: usa compile per regex performance"""
     import re
-    return re.sub(r"^[e®=]", "- ", text, flags=re.MULTILINE)
+    # Compile regex una volta sola per performance
+    if not hasattr(clean_text, '_regex'):
+        clean_text._regex = re.compile(r"^[e®=]", flags=re.MULTILINE)
+    
+    return clean_text._regex.sub("- ", text)
+
+# FUNZIONI DI UTILITÀ PER SKIP OPERAZIONI COSTOSE
+
+def should_skip_rotation_detection(img_page: Image.Image) -> bool:
+    """
+    Euristica per determinare se saltare la detection di rotazione.
+    """
+    width, height = img_page.size
+    
+    # Se l'immagine è molto piccola, probabilmente non ha bisogno di rotation detection
+    if width < 500 or height < 500:
+        return True
+    
+    # Se l'aspect ratio è molto diverso da quello tipico di un documento, skip
+    aspect_ratio = width / height
+    if aspect_ratio < 0.5 or aspect_ratio > 2.0:
+        return True
+    
+    return False
+
+def should_use_fast_preprocessing(img_page: Image.Image) -> bool:
+    """
+    Determina se usare preprocessing veloce basato sulle caratteristiche dell'immagine.
+    """
+    width, height = img_page.size
+    
+    # Per immagini piccole, usa preprocessing veloce
+    if width * height < 500000:  # < 0.5 megapixel
+        return True
+    
+    # Se l'immagine è già in modalità L (grayscale), usa fast
+    if img_page.mode == 'L':
+        return True
+        
+    return False
