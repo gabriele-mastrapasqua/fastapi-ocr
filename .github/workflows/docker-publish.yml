@@ -1,0 +1,41 @@
+name: Build and Publish Docker image
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'  # supporta tag come v1.0.0
+  workflow_dispatch:  # permette trigger manuale
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Extract version/tag
+      id: vars
+      run: |
+        if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+          VERSION_TAG=${GITHUB_REF##*/}
+        else
+          VERSION_TAG="latest"
+        fi
+        echo "VERSION_TAG=$VERSION_TAG" >> $GITHUB_OUTPUT
+
+    - name: Build and push image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: |
+          gabrielemastrapasqua/fastapi-ocr:latest
+          gabrielemastrapasqua/fastapi-ocr:${{ steps.vars.outputs.VERSION_TAG }}
