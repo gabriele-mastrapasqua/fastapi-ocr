@@ -2,19 +2,17 @@ version: '3.8'
 
 services:
   # Servizio CPU
-  paddleocr-api-cpu:
+  ocr-api-cpu:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: paddleocr-api-cpu
+    container_name: ocr-api-cpu
     ports:
       - "9292:9292"
     volumes:
       - .:/app
       - paddle_models_cpu:/root/.paddle
-      #- paddle_models_cpu:/home/appuser/.paddle:rw
       - paddleocr_models_cpu:/root/.paddleocr
-      #- paddleocr_models_cpu:/home/appuser/.paddleocr:rw
     environment:
       - DEVICE=cpu
     restart: unless-stopped

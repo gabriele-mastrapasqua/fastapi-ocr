@@ -26,3 +26,30 @@ force rebuild with
 ```sh
 make build
 ```
+
+## usage in other projects
+Add this service in your docker compose file like this:
+
+```yml
+version: '3.8'
+
+services:
+  # FastAPI ocr service
+  fastapi-ocr-api:
+    image: gabrielem0/fastapi-ocr:latest
+    container_name: fastapi-ocr-api
+    ports:
+      - "9292:9292"
+    volumes:
+      - .:/app
+      - paddle_models_cpu:/root/.paddle
+      - paddleocr_models_cpu:/root/.paddleocr
+    environment:
+      - DEVICE=cpu
+    restart: unless-stopped
+
+
+volumes:
+  paddle_models_cpu:
+  paddleocr_models_cpu:
+```
