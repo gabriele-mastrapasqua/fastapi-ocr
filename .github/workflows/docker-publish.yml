@@ -37,5 +37,5 @@ jobs:
         context: .
         push: true
         tags: |
-          gabrielemastrapasqua/fastapi-ocr:latest
-          gabrielemastrapasqua/fastapi-ocr:${{ steps.vars.outputs.VERSION_TAG }}
+          gabriele-mastrapasqua/fastapi-ocr:latest
+          gabriele-mastrapasqua/fastapi-ocr:${{ steps.vars.outputs.VERSION_TAG }}
