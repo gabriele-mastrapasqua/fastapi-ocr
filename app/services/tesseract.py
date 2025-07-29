@@ -60,7 +60,8 @@ def ocr_single_page_worker(page_data: Tuple[int, int, bytes, str, str, int]) -> 
         # OTTIMIZZAZIONE CRITICA: Ridimensiona SEMPRE se > 1MP
         if current_mp > 1.0:
             #img_page = utils.resize_image_for_fast_ocr(img_page, target_mp=0.8)
-            img_page = utils.resize_image_for_fast_ocr(img_page, target_mp=2.0)
+            #img_page = utils.resize_image_for_fast_ocr(img_page, target_mp=2.0)
+            img_page = utils.smart_resize_for_ocr(img_page, max_dimension=1000,  min_mp=1.5, )
             profile_print(f"→ Page {page_num + 1}: Image resized for speed", resize_start)
         else:
             profile_print(f"→ Page {page_num + 1}: Image already small, no resize needed", resize_start)
