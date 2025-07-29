@@ -44,9 +44,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 EXPOSE 9292
 
 # Healthcheck
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:9292/health || exit 1
+#HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+#  CMD curl -f http://localhost:9292/health || exit 1
 
 # Start command
-#CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "9292", "--reload"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "9292"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "9292", "--reload"]
