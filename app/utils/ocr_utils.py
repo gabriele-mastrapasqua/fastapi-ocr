@@ -165,6 +165,10 @@ def pdf_to_images(contents, base_64 = False):
             for page in pdf.pages:
                 # Convert page to image
                 image = page.to_image(resolution=300).original  # Era 300
+                
+                # added: smart resize for good OCR performance and quality
+                image = smart_resize_for_ocr(image, max_dimension=1000,  min_mp=1.5, )
+
                 if base_64:
                     # Convert PIL Image to base64 string
                     buffered = io.BytesIO()
