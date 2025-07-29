@@ -151,6 +151,9 @@ async def pdf_to_images(
     file: UploadFile = File(..., description="File to perform OCR on. Can be PDF or Image."),
     force_angle_rotation: int = 0,  # angolo di rotazione forzato (0 per nessuna rotazione, -90, 90, 180, ...)    
     to_base64: bool = True,  # se base64, ritorna una lista di immagini in base64
+    dpi_quality: int = 300,  # 300 super good quality, 200 faster but base quality
+    resize_max_dim: int = 1000, # max dimension for resize, if image is bigger than this it will be resized
+    resize_mp:int  = 1.5,  # megapixel for resize, if image is bigger than this it will be resized
 ):
     """
     Perform PDF to images conversion
@@ -176,7 +179,7 @@ async def pdf_to_images(
         contents = await file.read()
 
         if file_type == "PDF":
-            images, num_pages_in_pdf =utils.pdf_to_images(contents, base_64=to_base64)
+            images, num_pages_in_pdf =utils.pdf_to_images(contents, base_64=to_base64, dpi_quality=dpi_quality)
             return JSONResponse({"images": images, "to_base64": to_base64, "num_pages": num_pages_in_pdf})
     except Exception as e:
         logger.error(f"PDF Conversion processing failed: {e}")

@@ -144,7 +144,7 @@ def enhance_image_for_ocr(img: Image.Image) -> Image.Image:
     print(f"   → Advanced image enhancement completed in {enhance_time:.3f}s", flush=True)
     return result
 
-def pdf_to_images(contents, base_64 = False):
+def pdf_to_images(contents, base_64 = False, dpi_quality = 300, resize_max_dim = 1000, resize_mp=1.5):
     """
     Convert a PDF file bytes content to a list of images.
     
@@ -164,10 +164,10 @@ def pdf_to_images(contents, base_64 = False):
             num_pages = len(pdf.pages)
             for page in pdf.pages:
                 # Convert page to image
-                image = page.to_image(resolution=300).original  # Era 300
+                image = page.to_image(resolution=dpi_quality).original  # Era 300
                 
                 # added: smart resize for good OCR performance and quality
-                image = smart_resize_for_ocr(image, max_dimension=1000,  min_mp=1.5, )
+                image = smart_resize_for_ocr(image, max_dimension=resize_max_dim,  min_mp = resize_mp )
 
                 if base_64:
                     # Convert PIL Image to base64 string
