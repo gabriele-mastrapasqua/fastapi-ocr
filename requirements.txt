@@ -21,3 +21,14 @@ scipy>=1.10.0,<2.0.0
 requests>=2.31.0,<3.0.0
 
 pytesseract>=0.3.13  # Versione più recente che dovrebbe supportare NumPy 2.x
+
+# Document processing - basic
+PyPDF2>=3.0.0
+python-pptx>=0.6.21
+python-docx>=0.8.11
+openpyxl>=3.0.10
+
+# Document processing - advanced
+#unstructured[pdf]>=0.15.0  # Aggiunto supporto PDF e versione più recente
+PyMuPDF>=1.24.0  # Versione più recente
+pdfplumber>=0.11.0  # Versione più recente

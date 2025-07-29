@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.responses import JSONResponse
 import paddleocr
 import cv2
@@ -10,6 +10,11 @@ import logging
 import app.utils.ocr_utils as utils
 import traceback
 
+from enum import Enum
+
+
+import app.services.paddleocr as paddleocr
+
 # Setup logging
 import logging
 logger = logging.getLogger(__name__)
@@ -17,39 +22,8 @@ logger.setLevel(logging.INFO)  # Imposta solo il livello
 
 app = FastAPI(title="PaddleOCR API", version="1.0.0")
 
+paddleOcrEngine = paddleocr.PaddleOCREngine(lang="it")
 
-# Initialize PaddleOCR
-try:
-    device = os.getenv('DEVICE', 'cpu')
-    use_gpu = device.lower() == 'gpu'
-    
-    logger.info(f"Initializing PaddleOCR with device: {device}")
-    ocr = paddleocr.PaddleOCR(
-        use_angle_cls=True,
-        lang='it',  # Puoi cambiare la lingua qui
-        use_gpu=use_gpu,
-        show_log=True,
-        det_model_dir=None,  # Usa modelli default
-        rec_model_dir=None,
-        cls_model_dir=None,
-        #cls_model_dir="/root/.paddleocr/whl/cls/ch_ppocr_mobile_v2.0_cls_infer/",
-        ocr_version='PP-OCRv3',
-        cpu_threads=os.cpu_count(), 
-        
-    )
-    logger.info("PaddleOCR initialized successfully")
-
-    # Log informazioni sui modelli (se disponibili)
-    try:
-        logger.info(f"Detection model: {getattr(ocr, 'det_predictor', 'Default')}")
-        logger.info(f"Recognition model: {getattr(ocr, 'rec_predictor', 'Default')}")
-        logger.info(f"Classification model: {getattr(ocr, 'cls_predictor', 'Default')}")
-    except:
-        logger.info("Using default PaddleOCR models")
-
-except Exception as e:
-    logger.error(f"Failed to initialize PaddleOCR: {e}")
-    ocr = None
 
 @app.get("/")
 async def root():
@@ -57,22 +31,44 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    if ocr is None:
-        raise HTTPException(status_code=503, detail="OCR service not available")
     return {"status": "healthy", "device": os.getenv('DEVICE', 'cpu')}
+
+
+class Engine(str, Enum):
+    auto = "auto"
+    paddleocr = "paddleocr"
+    tesseract = "tesseract"
 
 @app.post("/ocr")
 async def perform_ocr(
     file: UploadFile = File(...),
+    engine: Engine = Form(Engine.auto),  # default "auto"
     force_angle_rotation: int = 0,  # angolo di rotazione forzato (0 per nessuna rotazione, -90, 90, 180, ...)
-    det_limit_side_len: int = 960,  # Risoluzione per detection
-    det_limit_type: str = 'max',    # 'max' o 'min'
-    rec_batch_num: int = 6,         # Batch size per recognition
-    max_text_length: int = 25       # Lunghezza massima testo riconosciuto):
+    
 ):
     """
-    Perform OCR on uploaded image
+    Perform OCR on uploaded file
     """
+
+    content_type = file.content_type
+    file_type = None
+    if content_type == "application/pdf":
+        file_type = "PDF"
+    elif content_type.startswith("image/"):
+        file_type = "Image"
+    else:
+        file_type = "Unsupported"
+
+
+    if engine == Engine.auto:
+        # TODO - check page count, if > 2 use tesseract, else use paddleOCR
+        ocr = paddleOcrEngine
+    elif engine == Engine.paddleocr:
+        ocr = paddleOcrEngine
+    elif engine == Engine.tesseract:
+        # TODO - implement tesseract OCR
+        ocr = paddleOcrEngine
+
     if ocr is None:
         raise HTTPException(status_code=503, detail="OCR service not available")
     
@@ -81,92 +77,15 @@ async def perform_ocr(
         raise HTTPException(status_code=400, detail="File must be an image")
     
     try:
-        # Read image
-        contents = await file.read()
-        image = Image.open(io.BytesIO(contents))
-        
-        # Convert PIL to OpenCV format
-        img_array = np.array(image)
-        if len(img_array.shape) == 3:
-            img_array = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
-        
-        # OCR con parametri personalizzati
-        logger.info(f"Advanced OCR with det_limit_side_len: {det_limit_side_len}, rec_batch_num: {rec_batch_num}")
-        
-
-        # Applica i parametri direttamente all'OCR
-        ocr.det_limit_side_len = det_limit_side_len
-        ocr.det_limit_type = det_limit_type
-        ocr.rec_batch_num = rec_batch_num
-        ocr.max_text_length = max_text_length
-
-        # TODO detect rotation of the image and rotate to improve OCR results
-        angle_rotation_detected, image_needs_rotation = utils.detect_angle_rotation_tesseract(preproc_img=image)
-        logger.info(f"Detected rotation angle: {angle_rotation_detected} degrees")
-
-        # TEST 
-        #rotation_applied = -90
-        rotation_applied = 0
-        if image_needs_rotation or force_angle_rotation != 0:
-            if force_angle_rotation != 0:
-                rotation_applied = force_angle_rotation
-            else:
-                rotation_applied = angle_rotation_detected
-        img_array = utils.rotate_image_numpy(img_array, angle=rotation_applied)  # Forza rotazione a 0 per test
-
-        # Usa OCR con paddleOCR per migliori risultati
-        initial_result = ocr.ocr(img_array, cls=True)
-        result = initial_result
-
-        # Step 2: Ordina i risultati
-        sorted_result = utils.sort_text_blocks(result)
-        
-        # Step 3: Process results
-        extracted_text = []
-        confidences = []
-        
-        for idx in range(len(sorted_result)):
-            res = sorted_result[idx]
-            if res is None:
-                continue
-
-            for line in res:
-                text = line[1][0]
-                confidence = line[1][1]
-                bbox = line[0]
-                confidences.append(confidence)
-                extracted_text.append({
-                    "text": text,
-                    "confidence": round(confidence, 4),
-                })
-        
-        avg_confidence = round(sum(confidences) / len(confidences), 4) if confidences else 0.0
-        
-        logger.info(f"OCR completed: {len(extracted_text)} elements, avg confidence: {avg_confidence}, rotation: {rotation_applied:.2f}°")
-        
-        return JSONResponse({
-            "success": True,
-            "results": extracted_text,
-            "total_text": "\n".join([item['text'] for item in extracted_text]),
-            "rotation_correction": {
-                "original_rotation_detected": round(-rotation_applied, 2) if rotation_applied != 0 else 0,
-                "correction_applied": round(rotation_applied, 2),
-                "was_corrected": rotation_applied != 0
-            },
-            "statistics": {
-                "total_blocks": len(extracted_text),
-                "average_confidence": avg_confidence,
-                "min_confidence": round(min(confidences), 4) if confidences else 0.0,
-                "max_confidence": round(max(confidences), 4) if confidences else 0.0
-            },
-            "parameters_used": {
-                "det_limit_side_len": det_limit_side_len,
-                "det_limit_type": det_limit_type,
-                "rec_batch_num": rec_batch_num,
-                "max_text_length": max_text_length
-            },
-            "device": os.getenv('DEVICE', 'cpu')
-        })
+        if file_type == "PDF":
+            # TODO - implement PDF to image conversion
+            raise HTTPException(status_code=400, detail="PDF files are not supported yet")
+        elif file_type == "Image":
+            # Read image
+            contents = await file.read()
+            image = Image.open(io.BytesIO(contents))
+            response = ocr.execute_ocr(image, force_angle_rotation=force_angle_rotation)
+            return JSONResponse(response)
         
     except Exception as e:
         logger.error(f"OCR processing failed: {e}")
