@@ -100,6 +100,43 @@ async def perform_ocr(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"OCR processing failed: {str(e)}")
 
+@app.post("/pdf-to-images")
+async def pdf_to_images(
+    file: UploadFile = File(..., description="File to perform OCR on. Can be PDF or Image."),
+    force_angle_rotation: int = 0,  # angolo di rotazione forzato (0 per nessuna rotazione, -90, 90, 180, ...)    
+    to_base64: bool = True,  # se base64, ritorna una lista di immagini in base64
+):
+    """
+    Perform PDF to images conversion
+    """
+
+    content_type = file.content_type
+    file_type = None
+    if content_type == "application/pdf":
+        file_type = "PDF"
+    elif content_type.startswith("image/"):
+        file_type = "Image"
+    else:
+        file_type = "Unsupported"
+    logger.info(f"Received file type: {file_type}, content type: {content_type}")
+
+
+
+    if file_type is not "PDF":
+        raise HTTPException(status_code=503, detail=f"Cannot convert {file_type} format to images! only pdf is supported!")
+    
+    try:
+        # read bytes from the file upload
+        contents = await file.read()
+
+        if file_type == "PDF":
+            images, num_pages_in_pdf =utils.pdf_to_images(contents, base_64=to_base64)
+            return JSONResponse({"images": images, "to_base64": to_base64, "num_pages": num_pages_in_pdf})
+    except Exception as e:
+        logger.error(f"PDF Conversion processing failed: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"PDF conversion processing failed: {str(e)}")
+
 
 if __name__ == "__main__":
     import uvicorn
