@@ -138,7 +138,7 @@ async def pdf_to_images(
 
 
 
-    if file_type is not "PDF":
+    if file_type != "PDF":
         raise HTTPException(status_code=503, detail=f"Cannot convert {file_type} format to images! only pdf is supported!")
     
     try:
