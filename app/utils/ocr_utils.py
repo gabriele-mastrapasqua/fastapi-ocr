@@ -4,6 +4,44 @@ from scipy import ndimage
 from PIL import Image
 import paddleocr
 import pytesseract
+import pdfplumber
+import tempfile
+import io
+import base64
+
+def pdf_to_images(contents, base_64 = False):
+    """
+    Convert a PDF file bytes content to a list of images.
+    
+    @contents: PDF file bytes content.
+    @base_64: If True, return images as base64 strings, otherwise as PIL
+
+    Returns: list of images (PIL Image or base64 strings). + num pages in PDF
+    """
+    tmp_file_path = None
+    with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
+        tmp_file.write(contents)
+        tmp_file_path = tmp_file.name
+        
+    images = []
+    with pdfplumber.open(tmp_file_path) as pdf:
+        num_pages = len(pdf.pages)
+        for page in pdf.pages:
+            # Convert page to image
+            # Use resolution=300 for better quality
+            # You can adjust the resolution as needed
+            image = page.to_image(resolution=300).original
+            if base_64:
+                # Convert PIL Image to base64 string
+                buffered = io.BytesIO()
+                image.save(buffered, format="PNG")
+                img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+                images.append(img_str)
+            else:
+                # Append PIL Image directly
+                images.append(image)
+            
+    return images, num_pages
 
 def sort_text_blocks(results):
     """

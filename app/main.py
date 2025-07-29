@@ -9,9 +9,9 @@ import os
 import logging
 import app.utils.ocr_utils as utils
 import traceback
-
 from enum import Enum
-
+import pdfplumber
+import tempfile
 
 import app.services.paddleocr as paddleocr
 
@@ -41,8 +41,8 @@ class Engine(str, Enum):
 
 @app.post("/ocr")
 async def perform_ocr(
-    file: UploadFile = File(...),
-    engine: Engine = Form(Engine.auto),  # default "auto"
+    file: UploadFile = File(..., description="File to perform OCR on. Can be PDF or Image."),
+    engine: Engine = Form(Engine.auto, description="OCR Engine to use: auto for auto select between tesseract for large files, or paddleocr."),  # default "auto"
     force_angle_rotation: int = 0,  # angolo di rotazione forzato (0 per nessuna rotazione, -90, 90, 180, ...)
     
 ):
@@ -58,6 +58,7 @@ async def perform_ocr(
         file_type = "Image"
     else:
         file_type = "Unsupported"
+    logger.info(f"Received file type: {file_type}, content type: {content_type}")
 
 
     if engine == Engine.auto:
@@ -72,17 +73,24 @@ async def perform_ocr(
     if ocr is None:
         raise HTTPException(status_code=503, detail="OCR service not available")
     
-    # Check file type
-    if not file.content_type.startswith('image/'):
-        raise HTTPException(status_code=400, detail="File must be an image")
-    
     try:
+        # read bytes from the file upload
+        contents = await file.read()
+
         if file_type == "PDF":
-            # TODO - implement PDF to image conversion
-            raise HTTPException(status_code=400, detail="PDF files are not supported yet")
+            images, num_pages_in_pdf =utils.pdf_to_images(contents, base_64=False)
+            logger.info(f"PDF converted to {num_pages_in_pdf} images")
+            if not images:
+                raise HTTPException(status_code=400, detail="No pages found in PDF")
+            results = []
+            for image in images:
+                logger.info(f"Performing OCR on image {image} with force_angle_rotation={force_angle_rotation}")
+                response = ocr.execute_ocr(image, force_angle_rotation=force_angle_rotation)
+                results.append(response)
+            return JSONResponse({"results": results, "num_pages": num_pages_in_pdf})
+            
         elif file_type == "Image":
             # Read image
-            contents = await file.read()
             image = Image.open(io.BytesIO(contents))
             response = ocr.execute_ocr(image, force_angle_rotation=force_angle_rotation)
             return JSONResponse(response)
