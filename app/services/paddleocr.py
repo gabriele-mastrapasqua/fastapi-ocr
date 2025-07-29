@@ -73,7 +73,7 @@ class PaddleOCREngine:
         if current_mp > 1.0:
             #img_page = utils.resize_image_for_fast_ocr(img_page, target_mp=0.8)
             #image = utils.resize_image_for_fast_ocr(image, target_mp=2.0)
-            image = utils.smart_resize_for_ocr(image, min_mp=2.0, )
+            image = utils.smart_resize_for_ocr(image, max_dimension=1000,  min_mp=1.5, )
             #image = utils.enhance_image_for_ocr(image)
             logger.info(f"Image resized to {image.size} for fast OCR processing")
         else:
