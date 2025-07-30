@@ -21,7 +21,7 @@ import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)  # Imposta solo il livello
 
-app = FastAPI(title="PaddleOCR API", version="1.0.0")
+app = FastAPI(title="FastAPI OCR API", version="1.0.0")
 
 paddleOcrEngine = paddleocr.PaddleOCREngine(lang="it")
 
@@ -55,7 +55,7 @@ tesseractOCREngine = tesseract.TesseractOCREngine(lang="ita", ocr_config="--psm 
 
 @app.get("/")
 async def root():
-    return {"message": "PaddleOCR API Server", "device": os.getenv('DEVICE', 'cpu')}
+    return {"message": "FastAPI OCR API Server", "device": os.getenv('DEVICE', 'cpu')}
 
 @app.get("/health")
 async def health_check():
