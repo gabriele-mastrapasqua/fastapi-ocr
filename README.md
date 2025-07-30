@@ -52,3 +52,43 @@ volumes:
   paddle_models_cpu:
   paddleocr_models_cpu:
 ```
+
+## Calling this service for OCR
+You can call this service using curl or for ex. py:
+
+```py
+def call_ocr_service(file_path: str, engine: str = "auto", force_angle_rotation = 0):
+    """Call the OCR service to extract text from a PDF file
+
+    Args:engine (str): The OCR engine to use, default is "auto", or "tesseract" or "paddleocr"
+    force_angle_rotation (int): Force rotation angle for the OCR, default is 0 (no rotation)
+    Returns:
+        dict: The OCR response containing extracted text and metadata
+    """
+    import requests
+
+    url = 'http://localhost:9292/ocr?force_angle_rotation=0'
+
+    # Open the file in binary mode
+    with open(file_path, 'rb') as f:
+        files = {
+            'file': (file_path, f, 'application/pdf'),
+        }
+        data = {
+            'engine': engine
+        }
+        headers = {
+            'accept': 'application/json'
+        }
+
+        response = requests.post(url, headers=headers, files=files, data=data)
+
+    # Output response
+    res = response.json()
+    return res
+```
+
+You can choose the OCR engine to use, default is "auto", or "tesseract" or "paddleocr".
+
+With auto this service will use tesseract for bigger documents with more pages, otherwise paddleocr for more quality but slower speed.
+
