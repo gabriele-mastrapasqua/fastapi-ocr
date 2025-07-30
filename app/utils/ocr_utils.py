@@ -169,6 +169,12 @@ def pdf_to_images(contents, base_64 = False, dpi_quality = 300, resize_max_dim =
                 # added: smart resize for good OCR performance and quality
                 image = smart_resize_for_ocr(image, max_dimension=resize_max_dim,  min_mp = resize_mp )
 
+                # rotate the image if needed, some are -90/90 from scans
+                angle, needs_rotation = detect_angle_rotation_tesseract(image)
+                if needs_rotation:
+                    image = rotate_image_pil(image, angle)
+                
+
                 if base_64:
                     # Convert PIL Image to base64 string
                     buffered = io.BytesIO()
