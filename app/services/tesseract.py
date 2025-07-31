@@ -301,7 +301,6 @@ class TesseractOCREngine:
             "device": 'cpu'
         }
     
-
     
     def execute_ocr_performance_test(self, images, force_angle_rotation=0):
         """

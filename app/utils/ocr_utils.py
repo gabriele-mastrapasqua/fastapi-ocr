@@ -145,6 +145,87 @@ def enhance_image_for_ocr(img: Image.Image) -> Image.Image:
     print(f"   → Advanced image enhancement completed in {enhance_time:.3f}s", flush=True)
     return result
 
+def pdf_to_text(contents):
+    """
+    Convert a PDF file bytes content to a list of texts if possible and safe.
+    
+    @contents: PDF file bytes content.
+
+    Returns: list of txt from pdf lib
+    """
+    def _pdfplumber_has_cid_fonts_plumber(page) -> bool:
+        """Check if page has CID fonts using pdfplumber (more accurate)"""
+        try:
+            for font in page.objects.get("char", []):
+                if font.get("fontname", "").startswith("/CID"):
+                    return True
+            return False
+        except Exception as e:
+            print(f"❌ CID font detection error: {str(e)}", flush=True)
+            return False
+    def _fitz_has_cid_fonts(page) -> bool:
+        font_list = page.get_fonts()
+        
+        for font in font_list:
+            font_name = font[3]  # font[3] is the font name
+            font_type = font[1]  # font[1] is the font type
+            
+            # Check for CID indicators
+            if any(cid_indicator in font_name.upper() for cid_indicator in 
+                   ['CID', 'IDENTITY', 'UNICODE', '+', 'SUBSET']):
+                return True
+        
+        return False
+
+    try:
+        tmp_file_path = None
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
+            tmp_file.write(contents)
+            tmp_file_path = tmp_file.name
+            
+        texts = []
+        num_pages = 0
+        with pdfplumber.open(tmp_file_path) as pdf:
+            # 1 - try with pdfplumber, works fine for all pdf files but some...
+            num_pages = len(pdf.pages)
+            print(f"pdfplumber num pages found {num_pages}", flush=True)
+            for page in pdf.pages:
+                extracted_text = page.extract_text() or ""
+                has_cid_fonts = _pdfplumber_has_cid_fonts_plumber(page)
+                
+                print(f"* pdfplumber pdf page info: txt len: {len(extracted_text)} and has cid fonts: {has_cid_fonts}", flush=True)
+                if not has_cid_fonts and not extracted_text == "":
+                    print(f"* pdfplumber page has some text {len(extracted_text)}!", flush=True)
+                    texts.append(extracted_text.strip())
+
+            # 2 - fallback to another lib if this pdf fails to load
+            if num_pages == 0:
+                import fitz
+                doc = fitz.open(tmp_file_path)
+                
+                num_pages = doc.page_count
+                print(f"fitz pdf pages count {num_pages}", flush=True)
+                
+                for page_num in range(len(doc)):
+                    page = doc[page_num]
+                    extracted_text = page.get_text() or ""
+                    has_cid_fonts = _fitz_has_cid_fonts(page)
+                    
+                    print(f"* fitz pdf page info txt len: {len(extracted_text)} and has cid fonts: {has_cid_fonts}", flush=True)
+                    if not has_cid_fonts and not extracted_text == "":
+                        print(f"* fitz pdf page has some text {len(extracted_text)}!", flush=True)
+                        texts.append(extracted_text.strip())
+            
+    except Exception as e:
+        traceback.print_exc()
+        print(f"Error when reaading pdf {str(e)}", flush=True)
+
+    finally:
+        # Clean up temp file
+        os.unlink(tmp_file_path)    
+    
+    return texts, num_pages
+
 def pdf_to_images(contents, base_64 = False, dpi_quality = 300, resize_max_dim = 1000, resize_mp=1.5):
     """
     Convert a PDF file bytes content to a list of images.
@@ -175,7 +256,6 @@ def pdf_to_images(contents, base_64 = False, dpi_quality = 300, resize_max_dim =
             # Append PIL Image directly
             images.append(image)
 
-
     try:
         tmp_file_path = None
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
@@ -202,8 +282,10 @@ def pdf_to_images(contents, base_64 = False, dpi_quality = 300, resize_max_dim =
                 
                 num_pages = doc.page_count
                 print(f"fitz pdf pages count {num_pages}", flush=True)
+                
                 for page_num in range(len(doc)):
                     page = doc[page_num]
+                  
                     # Convert page to image
                     zoom = 300 / 72
                     mat = fitz.Matrix(zoom, zoom)

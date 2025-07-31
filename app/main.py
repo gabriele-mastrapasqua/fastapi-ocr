@@ -44,7 +44,9 @@ class Engine(str, Enum):
 async def perform_ocr(
     file: UploadFile = File(..., description="File to perform OCR on. Can be PDF or Image."),
     engine: Engine = Form(Engine.auto, description="OCR Engine to use: auto for auto select between tesseract for large files, or paddleocr."),  # default "auto"
-    force_angle_rotation: int = 0,  # angolo di rotazione forzato (0 per nessuna rotazione, -90, 90, 180, ...)
+    force_angle_rotation: int = Form(0, description="If set to 0 will not be activated, if set to an angle will force page rotations. Useful to force rotation for some pdf scans. The system will try to automatically rotate pages if needed when this is set to 0 (default)"), 
+    use_tesseract_after_min_pages: int = Form(2, description="Let's use tesseract after at least (def 2 pages) as it's more faster."),
+    bypass_ocr_use_pdf_text_if_available: bool = Form(True, description="use pdf text if it's safe to use (no strange cid fonts, etc) so bypass OCR completely. Useful for pc exports pdf for faster responses. Set to False will always use ocr."), 
     
 ):
     """
@@ -77,35 +79,54 @@ async def perform_ocr(
     try:
         # read bytes from the file upload
         contents = await file.read()
+        results = {}
 
         if file_type == "PDF":
-            images, num_pages_in_pdf =utils.pdf_to_images(contents, base_64=False)
+            logger.info(f"Lets try first to extract txt from pdf if is safe to do so... bypass_ocr_use_pdf_text_if_available params is set to {bypass_ocr_use_pdf_text_if_available}")
+            texts, num_pages_in_pdf = utils.pdf_to_text(contents)
             logger.info(f"PDF converted to {num_pages_in_pdf} images")
-            if not images:
-                raise HTTPException(status_code=400, detail="No pages found in PDF")
-            
-            results = []
-            if engine == Engine.tesseract or (engine == Engine.auto and num_pages_in_pdf > 2):
-                # check page count, if > 2 use tesseract, else use paddleOCR
+
+            if bypass_ocr_use_pdf_text_if_available and len(texts) > 0:
+                extracted_text = "\n".join(texts)
+                logger.info(f"bypass_ocr_use_pdf_text_if_available is {bypass_ocr_use_pdf_text_if_available} and PDF has some text extrable without OCR and safe to use (without CID fonts): first 100 chars: {repr(extracted_text[:100])} ")
+                # so if pdf can export safely txt, let's bypass OCR and return readable txt from pdf
                 ocr = tesseractOCREngine
-                logger.info(f"Using Tesseract OCR for {num_pages_in_pdf} pages")
-                # tesseract can run multiple pages in parallel to speed up him.
+                results = {
+                    "success": True,
+                    "results": extracted_text,
+                    "total_text": extracted_text,
+                    "device": os.getenv('DEVICE', 'cpu')
+                }
+            else: 
+                logger.info(f"Let's do OCR")
+                images, num_pages_in_pdf =utils.pdf_to_images(contents, base_64=False)
+                logger.info(f"PDF converted to {num_pages_in_pdf} images")
+
+                if not images:
+                    raise HTTPException(status_code=400, detail="No pages found in PDF")
                 
-                response = ocr.execute_ocr(images, force_angle_rotation=force_angle_rotation)
-                #response = ocr.execute_ocr_performance_test(images, force_angle_rotation=force_angle_rotation)
+                # def use_tesseract_after_min_pages = 2 min pages to run using tesseract instead of paddle (more faster, less quality)
+                if engine == Engine.tesseract or (engine == Engine.auto and num_pages_in_pdf > use_tesseract_after_min_pages):
+                    # check page count, if > 2 use tesseract, else use paddleOCR
+                    ocr = tesseractOCREngine
+                    logger.info(f"Using Tesseract OCR for {num_pages_in_pdf} pages")
+                    
+                    # tesseract can run multiple pages in parallel to speed up the process.
+                    response = ocr.execute_ocr(images, force_angle_rotation=force_angle_rotation)
+                    #response = ocr.execute_ocr_performance_test(images, force_angle_rotation=force_angle_rotation)
 
+                    results = response
+                else:
+                    # Use paddleOCR for small PDFs for high quality results
+                    # paddle is much slower
+                    logger.info(f"Using PaddleOCR for {num_pages_in_pdf} pages")
+                    
+                    for image in images:
+                        logger.info(f"Performing OCR on image {image} with force_angle_rotation={force_angle_rotation}")
+                        response = ocr.execute_ocr(image, force_angle_rotation=force_angle_rotation)
+                        results = response
 
-                results.append(response)
-            else:
-                # Use paddleOCR for small PDFs for high quality results
-                # paddle is much slower
-                logger.info(f"Using PaddleOCR for {num_pages_in_pdf} pages")
-                
-                for image in images:
-                    logger.info(f"Performing OCR on image {image} with force_angle_rotation={force_angle_rotation}")
-                    response = ocr.execute_ocr(image, force_angle_rotation=force_angle_rotation)
-                    results.append(response)
-
+            # finally return a response    
             return JSONResponse({"results": results, "num_pages": num_pages_in_pdf})
             
         elif file_type == "Image":
@@ -152,7 +173,7 @@ async def pdf_to_images(
         contents = await file.read()
 
         if file_type == "PDF":
-            images, num_pages_in_pdf =utils.pdf_to_images(contents, base_64=to_base64, dpi_quality=dpi_quality)
+            images, num_pages_in_pdf, texts =utils.pdf_to_images(contents, base_64=to_base64, dpi_quality=dpi_quality)
             return JSONResponse({"images": images, "to_base64": to_base64, "num_pages": num_pages_in_pdf})
     except Exception as e:
         logger.error(f"PDF Conversion processing failed: {e}")
