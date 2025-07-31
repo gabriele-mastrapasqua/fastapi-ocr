@@ -10,8 +10,6 @@ import logging
 import app.utils.ocr_utils as utils
 import traceback
 from enum import Enum
-import pdfplumber
-import tempfile
 
 import app.services.paddleocr as paddleocr
 import app.services.tesseract as tesseract
