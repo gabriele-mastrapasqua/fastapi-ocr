@@ -173,7 +173,7 @@ async def pdf_to_images(
         contents = await file.read()
 
         if file_type == "PDF":
-            images, num_pages_in_pdf, texts =utils.pdf_to_images(contents, base_64=to_base64, dpi_quality=dpi_quality)
+            images, num_pages_in_pdf = utils.pdf_to_images(contents, base_64=to_base64, dpi_quality=dpi_quality)
             return JSONResponse({"images": images, "to_base64": to_base64, "num_pages": num_pages_in_pdf})
     except Exception as e:
         logger.error(f"PDF Conversion processing failed: {e}")
