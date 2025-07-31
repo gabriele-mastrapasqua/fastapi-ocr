@@ -9,6 +9,7 @@ import tempfile
 import io
 import base64
 import os
+import traceback
 import time
 
 def profile_print(msg, start_time=None):
@@ -153,6 +154,28 @@ def pdf_to_images(contents, base_64 = False, dpi_quality = 300, resize_max_dim =
 
     Returns: list of images (PIL Image or base64 strings). + num pages in PDF
     """
+
+    def _convert_image_list(image, images):
+        # added: smart resize for good OCR performance and quality
+        image = smart_resize_for_ocr(image, max_dimension=resize_max_dim,  min_mp = resize_mp )
+
+        # rotate the image if needed, some are -90/90 from scans
+        angle, needs_rotation = detect_angle_rotation_tesseract(image)
+        if needs_rotation:
+            image = rotate_image_pil(image, angle)
+        
+
+        if base_64:
+            # Convert PIL Image to base64 string
+            buffered = io.BytesIO()
+            image.save(buffered, format="PNG")
+            img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+            images.append(img_str)
+        else:
+            # Append PIL Image directly
+            images.append(image)
+
+
     try:
         tmp_file_path = None
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
@@ -160,30 +183,43 @@ def pdf_to_images(contents, base_64 = False, dpi_quality = 300, resize_max_dim =
             tmp_file_path = tmp_file.name
             
         images = []
+        num_pages = 0
         with pdfplumber.open(tmp_file_path) as pdf:
+            # 1 - try with pdfplumber, works fine for all pdf files but some...
             num_pages = len(pdf.pages)
+            print(f"pdfplumber num pages found {num_pages}", flush=True)
             for page in pdf.pages:
                 # Convert page to image
                 image = page.to_image(resolution=dpi_quality).original  # Era 300
                 
-                # added: smart resize for good OCR performance and quality
-                image = smart_resize_for_ocr(image, max_dimension=resize_max_dim,  min_mp = resize_mp )
+                _convert_image_list(image, images)
+                print(f"* pdfplumber images to return {len(images)}", flush=True)
 
-                # rotate the image if needed, some are -90/90 from scans
-                angle, needs_rotation = detect_angle_rotation_tesseract(image)
-                if needs_rotation:
-                    image = rotate_image_pil(image, angle)
+            # 2 - fallback to another lib if this pdf fails to load
+            if num_pages == 0:
+                import fitz
+                doc = fitz.open(tmp_file_path)
                 
+                num_pages = doc.page_count
+                print(f"fitz pdf pages count {num_pages}", flush=True)
+                for page_num in range(len(doc)):
+                    page = doc[page_num]
+                    # Convert page to image
+                    zoom = 300 / 72
+                    mat = fitz.Matrix(zoom, zoom)
+                    pix = page.get_pixmap(matrix=mat)
+                    
+                    # Convert to PIL Image
+                    img_bytes = pix.tobytes("png")
+                    image = Image.open(io.BytesIO(img_bytes))
 
-                if base_64:
-                    # Convert PIL Image to base64 string
-                    buffered = io.BytesIO()
-                    image.save(buffered, format="PNG")
-                    img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-                    images.append(img_str)
-                else:
-                    # Append PIL Image directly
-                    images.append(image)
+                    _convert_image_list(image, images)
+                    print(f"* fitz pdf lib images to return {len(images)}", flush=True)
+            
+    except Exception as e:
+        traceback.print_exc()
+        print(f"Error when reaading pdf {str(e)}", flush=True)
+
     finally:
         # Clean up temp file
         os.unlink(tmp_file_path)    
