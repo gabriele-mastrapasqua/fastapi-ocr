@@ -386,6 +386,45 @@ def rotate_image_pil(image: Image.Image, angle: int) -> Image.Image:
     profile_print(f"   → PIL rotation completed", rotation_start)
     return result
 
+
+def rotate_image_if_needed(preproc_img: Image.Image, force_angle = None) -> Image.Image:
+    """
+    Rotate the image if Tesseract detects an angle.
+    Returns the rotated image or the original if no rotation is needed.
+    """
+    # Use Tesseract to find orientation
+    osd = pytesseract.image_to_osd(preproc_img)
+    print(f"OSD Output: {osd}\n")
+
+    # Estrai angolo di rotazione
+    rotation_line = [line for line in osd.split('\n') if "Orientation in degrees" in line]
+    if rotation_line:
+        angle = int(rotation_line[0].split(":")[1].strip())
+        print(f"→ Rotazione rilevata: {angle}°")
+
+        """
+        Orientation in degrees	Rotazione del testo	        Azione da fare sull’immagine
+        0	                    Corretta	                Nessuna
+        90	                    Ruotata a destra	        Ruotare -90° (a sinistra)
+        180	                    Capovolta	                Ruotare -180°
+        270	                    Ruotata a sinistra	        Ruotare -90° (a destra)
+        """
+
+        # Correggi l'immagine se necessario
+        needs_rotation = angle != 0
+        if angle != 0:
+            corrected_angle = - ((360 - angle) % 360)
+            if force_angle is not None:
+                corrected_angle = force_angle
+                print(f"→ Immagine forzata a routare da parametro di {corrected_angle}°")
+            preproc_img = preproc_img.rotate(corrected_angle, expand=True)
+            print(f"→ Immagine ruotata di {corrected_angle}°")
+        
+    else:
+        print("→ Nessun angolo di rotazione rilevato, immagine non modificata.")
+        
+    return preproc_img, needs_rotation
+
 def detect_angle_rotation_tesseract(preproc_img: Image.Image) -> tuple:
     """
     Detect angle rotation using Tesseract OCR.

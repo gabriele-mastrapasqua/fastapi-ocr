@@ -7,7 +7,8 @@ from PIL import Image
 import io
 import os
 import logging
-import app.utils.ocr_utils as utils
+import app.utils.ocr_utils as ocr_utils
+import app.utils.file_utils as file_utils
 import traceback
 from enum import Enum
 
@@ -47,7 +48,7 @@ async def perform_ocr(
     force_angle_rotation: int = Form(0, description="If set to 0 will not be activated, if set to an angle will force page rotations. Useful to force rotation for some pdf scans. The system will try to automatically rotate pages if needed when this is set to 0 (default)"), 
     use_tesseract_after_min_pages: int = Form(2, description="Let's use tesseract after at least (def 2 pages) as it's more faster."),
     bypass_ocr_use_pdf_text_if_available: bool = Form(True, description="use pdf text if it's safe to use (no strange cid fonts, etc) so bypass OCR completely. Useful for pc exports pdf for faster responses. Set to False will always use ocr."), 
-    
+
 ):
     """
     Perform OCR on uploaded file
@@ -83,8 +84,8 @@ async def perform_ocr(
 
         if file_type == "PDF":
             logger.info(f"Lets try first to extract txt from pdf if is safe to do so... bypass_ocr_use_pdf_text_if_available params is set to {bypass_ocr_use_pdf_text_if_available}")
-            texts, num_pages_in_pdf = utils.pdf_to_text(contents)
-            logger.info(f"PDF converted to {num_pages_in_pdf} images")
+            texts, num_pages_in_pdf = ocr_utils.pdf_to_text(contents)
+            logger.info(f"PDF converted to {num_pages_in_pdf} text")
 
             if bypass_ocr_use_pdf_text_if_available and len(texts) > 0:
                 extracted_text = "\n".join(texts)
@@ -99,7 +100,7 @@ async def perform_ocr(
                 }
             else: 
                 logger.info(f"Let's do OCR")
-                images, num_pages_in_pdf =utils.pdf_to_images(contents, base_64=False)
+                images, num_pages_in_pdf = ocr_utils.pdf_to_images(contents, base_64=False)
                 logger.info(f"PDF converted to {num_pages_in_pdf} images")
 
                 if not images:
@@ -147,7 +148,8 @@ async def pdf_to_images(
     to_base64: bool = True,  # se base64, ritorna una lista di immagini in base64
     dpi_quality: int = 300,  # 300 super good quality, 200 faster but base quality
     resize_max_dim: int = 1000, # max dimension for resize, if image is bigger than this it will be resized
-    resize_mp:int  = 1.5,  # megapixel for resize, if image is bigger than this it will be resized
+    resize_mp:float  = 1.5,  # megapixel for resize, if image is bigger than this it will be resized
+    max_page_to_process: int = Form(1, description="Maximum number of pages to process for vision extraction. Default is unlimited. if set, we limit to max X pages for llm vision extraction."),
 ):
     """
     Perform PDF to images conversion
@@ -165,16 +167,19 @@ async def pdf_to_images(
 
 
 
-    if file_type != "PDF":
-        raise HTTPException(status_code=503, detail=f"Cannot convert {file_type} format to images! only pdf is supported!")
+    if file_type == "Unsupported":
+        raise HTTPException(status_code=503, detail=f"Cannot convert {file_type} format to images! only pdf and images are supported!")
     
     try:
         # read bytes from the file upload
         contents = await file.read()
 
         if file_type == "PDF":
-            images, num_pages_in_pdf = utils.pdf_to_images(contents, base_64=to_base64, dpi_quality=dpi_quality)
+            images, num_pages_in_pdf = file_utils.pdf_to_images(contents, base_64=to_base64, dpi_quality=dpi_quality, max_pages=max_page_to_process)
             return JSONResponse({"images": images, "to_base64": to_base64, "num_pages": num_pages_in_pdf})
+        elif file_type == "Image":
+            image = file_utils.image_to_base64(contents)
+            return JSONResponse({"images": [image], "to_base64": to_base64, "num_pages": 1})
     except Exception as e:
         logger.error(f"PDF Conversion processing failed: {e}")
         traceback.print_exc()
