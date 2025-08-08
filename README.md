@@ -1,16 +1,25 @@
-# paddleocr-fastapi
+# Fastapi + ocr
 PaddleOCR and tesseract as a FastAPI service
 
-## features
-- Able to switch to tesseract (faster, less quality) or PaddleOCR (better quality, on cpu is slower);
-- Bypass OCR for extraction speed when possible: auto detect if there are strange fonts (Cid) from PDFs that prevent us to extract text directly from the PDF. If possible, skip the OCR process entirely and extract text from the pdf directly. This speedup the process of text extraction of 100x;
-- Detect and auto rotate documents if necessary: It will use tesseract angle detection for PDFs (usually this will add +0.5s - 1.3s time per page to check page rotation). Usually documents scans are -90 / +90  more or less. With this approximation we can easly send a redacted image of the document's page so the recognition performance will improve. PaddleOCR will automatically try to work even on rotated pages, but the quality of the OCR will improve fixing the rotation before sending the page to the OCR process;
-- Pdf to image conversion in PNG / JPG using best quality;
-- Optionally scale and resize the converted input image to improve OCR speed performace;
-- Basic image pre-processing to improve tesseract recognition: gray scale, color corrections, sharpness filters;
-- LLM friendly, will return clean text useful to be processed to an LLM, for example for adding some RAG context to your prompt;
-- Pdf to image in base64: useful to be used for llm attachments (openai sdk chat completition format);
-- custom limit how many pdf pages to process from page 1-n, useful for large PDFs where the interestin content is at the start of the file.
+## Features
+
+* **Switchable OCR Engines**: Choose between **Tesseract** (faster, lower quality) or **PaddleOCR** (higher quality, slower on CPU).
+
+* **OCR Bypass for Faster Extraction**: Automatically detects unusual fonts (e.g., CID fonts) that prevent direct text extraction from PDFs. If the text can be extracted directly, the OCR step is skipped entirely — resulting in up to **100x faster** processing.
+
+* **Auto-Rotate Documents**: Detect and correct page rotation using Tesseract’s angle detection (adds \~0.5s–1.3s per page). Scanned documents are often rotated ±90°. By rotating pages before OCR, recognition accuracy improves significantly. PaddleOCR can handle rotated pages, but results are better if rotation is corrected in advance.
+
+* **High-Quality PDF to Image Conversion**: Converts PDFs to **PNG** or **JPG** with the best possible quality.
+
+* **Optional Image Scaling**: Resize input images to improve OCR speed and performance.
+
+* **Basic Image Preprocessing**: Enhance Tesseract recognition through grayscale conversion, color correction, and sharpening filters.
+
+* **LLM-Friendly Output**: Returns clean, structured text optimized for use with large language models — ideal for adding RAG (Retrieval-Augmented Generation) context to prompts.
+
+* **PDF to Base64 Image**: Converts PDF pages to base64-encoded images, useful for passing as file attachments in OpenAI's chat completion format.
+
+* **Custom Page Limits**: Process only a selected range of pages (e.g., from page 1 to N), which is useful for large PDFs where relevant content is at the beginning.
 
 ## TODOs
 - [ ] docker version of PaddleOCR for gpu
