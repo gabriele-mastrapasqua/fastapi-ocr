@@ -2,10 +2,19 @@
 PaddleOCR and tesseract as a FastAPI service
 
 ## features
-- auto rotation of rotated documents
-- pdf to image to ocr
-- pdf to image to base64 list of images, useful for llm attachments
+- Able to switch to tesseract (faster, less quality) or PaddleOCR (better quality, on cpu is slower); 
+- Detect and auto rotate documents if necessary: It will use tesseract angle detection for PDFs (usually this will add +0.5s - 1.3s time per page to check page rotation). Usually documents scans are -90 / +90  more or less. With this approximation we can easly send a redacted image of the document's page so the recognition performance will improve. PaddleOCR will automatically try to work even on rotated pages, but the quality of the OCR will improve fixing the rotation before sending the page to the OCR process;
+- Pdf to image conversion in PNG / JPG;
+- Optionally scale input image quality to improve OCR speed performace;
+- Basic image processing to improve tesseract recognition;
+- LLM friendly, will return clean text useful to be processed to an LLM, for example for adding some RAG context to your prompt;
+- Pdf to image in base64: useful to be used for llm attachments (openai sdk chat completition format);
+- limit pdf max pages to process
 
+## TODOs
+- [ ] docker version of PaddleOCR for gpus
+- [ ] improve API params for custom image pre-processing before conversion
+- [ ] handle other kind of file format 
 
 ## swagger api
 Swagger docs Are published under http://localhost:9292/docs
