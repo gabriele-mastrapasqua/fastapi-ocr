@@ -2,19 +2,20 @@
 PaddleOCR and tesseract as a FastAPI service
 
 ## features
-- Able to switch to tesseract (faster, less quality) or PaddleOCR (better quality, on cpu is slower); 
+- Able to switch to tesseract (faster, less quality) or PaddleOCR (better quality, on cpu is slower);
+- Bypass OCR for extraction speed when possible: auto detect if there are strange fonts (Cid) from PDFs that prevent us to extract text directly from the PDF. If possible, skip the OCR process entirely and extract text from the pdf directly. This speedup the process of text extraction of 100x;
 - Detect and auto rotate documents if necessary: It will use tesseract angle detection for PDFs (usually this will add +0.5s - 1.3s time per page to check page rotation). Usually documents scans are -90 / +90  more or less. With this approximation we can easly send a redacted image of the document's page so the recognition performance will improve. PaddleOCR will automatically try to work even on rotated pages, but the quality of the OCR will improve fixing the rotation before sending the page to the OCR process;
-- Pdf to image conversion in PNG / JPG;
-- Optionally scale input image quality to improve OCR speed performace;
-- Basic image processing to improve tesseract recognition;
+- Pdf to image conversion in PNG / JPG using best quality;
+- Optionally scale and resize the converted input image to improve OCR speed performace;
+- Basic image pre-processing to improve tesseract recognition: gray scale, color corrections, sharpness filters;
 - LLM friendly, will return clean text useful to be processed to an LLM, for example for adding some RAG context to your prompt;
 - Pdf to image in base64: useful to be used for llm attachments (openai sdk chat completition format);
-- limit pdf max pages to process
+- custom limit how many pdf pages to process from page 1-n, useful for large PDFs where the interestin content is at the start of the file.
 
 ## TODOs
-- [ ] docker version of PaddleOCR for gpus
+- [ ] docker version of PaddleOCR for gpu
 - [ ] improve API params for custom image pre-processing before conversion
-- [ ] handle other kind of file format 
+- [ ] handle other kind of file formats, like pptx, docx, excel, ...
 
 ## swagger api
 Swagger docs Are published under http://localhost:9292/docs
